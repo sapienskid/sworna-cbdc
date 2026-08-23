@@ -4,12 +4,13 @@
 #
 # The CB host owns ONLY the central-bank org: orderer, peer0.centralbank, the
 # org1 + orderer CAs, the token CA, issuer/auditor, backend and CB portal.
-# Each commercial bank self-provisions its own org + peer + owner on its own VM
-# and is added to the settlement channel via scripts/onboard-bank.sh.
+# Each commercial bank self-provisions its own org + peer + owner on its own VM,
+# is added to the settlement channel via scripts/onboard-bank.sh — all while
+# this host stays up.
 #
 # Usage: ./scripts/deploy-centralbank.sh [--provision]
-#   --provision   also generate wallet-pool keys for every registered bank
-#                 (requires the token CA + backend to be running)
+#   --provision   mint wallet pools for every registered bank (the registry
+#                 starts EMPTY; create banks via POST /api/v1/banks first)
 #
 # After banks are onboarded (onboard-bank.sh) run scripts/commit-chaincode.sh
 # to commit the chaincode endorsement policy.
@@ -28,20 +29,20 @@ done
 
 cd "$ROOT/network"
 
-echo "==> [1/4] Fabric network (central-bank org only, channel settlement)"
+echo "==> [1/5] Fabric network (central-bank org only, channel settlement)"
 ./network.sh up createChannel -ca
 
-echo "==> [2/4] Token chaincode installed + approved for the central-bank org"
+echo "==> [2/5] Token chaincode installed + approved for the central-bank org"
 ./network.sh deployCCAAS -ccn tokenchaincode -ccp "$ROOT/token-services/tokenchaincode" -ccs 1
 
-echo "==> [3/4] Token engine (issuer, auditor)"
+echo "==> [3/5] Token engine (issuer, auditor)"
 cd "$ROOT/token-services"
 docker compose -f compose-ca.yaml up -d          # token CA (idemix issuer)
 
-# A fresh clone has no identities (keys/ is gitignored). Enroll the FSC node
-# identities + demo wallets once, before the engine starts.
+# A fresh clone has no identities (keys/ is gitignored). Enroll the CB's own
+# identities once, before the engine starts.
 if [ ! -d "$ROOT/token-services/keys/issuer/fsc" ]; then
-  echo "==> enrolling token identities (fsc nodes + demo wallets)"
+  echo "==> enrolling CB token identities (issuer + auditor)"
   for i in $(seq 1 30); do
     if curl -sf http://localhost:27054/cainfo >/dev/null 2>&1; then break; fi
     sleep 2
@@ -49,33 +50,24 @@ if [ ! -d "$ROOT/token-services/keys/issuer/fsc" ]; then
   ./scripts/enroll-users.sh
 fi
 
+# Render the engine confs (owner resolvers come from SWORNA_OWNERS; empty on a
+# fresh CB — banks are onboarded at runtime and onboard-bank.sh re-renders).
+echo "==> rendering engine confs"
+for svc in auditor issuer; do
+  OWNERS="${SWORNA_OWNERS:-}" \
+    python3 "$ROOT/scripts/render-owner-conf.py" "$svc/conf/core.yaml.tpl" \
+    > "$svc/conf/core.yaml"
+done
+
 COMPOSE_FILES="-f docker-compose.yaml"
 if env | grep -q '^SWORNA_OWNER_.*_HOST='; then
   echo "   generating cross-host DNS override (owner hosts -> bank VMs)"
-  python3 "$ROOT/scripts/gen-net-overrides.py" cb "$ROOT/token-services/docker-compose.net.yaml"
+  python3 "$ROOT/scripts/gen-net-overrides.py" cb docker-compose.net.yaml
   COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.net.yaml"
 fi
 docker compose $COMPOSE_FILES up -d --build issuer auditor
 
-if [ "$PROVISION" = "1" ]; then
-  echo "==> provisioning wallet pools for registered banks"
-  sleep 10  # let the engine connect
-  TOKEN=$(curl -sf -X POST http://localhost:8000/api/v1/auth/login \
-    -H 'Content-Type: application/json' \
-    -d '{"username":"cbadmin","password":"sworna-cb"}' | jq -r .token 2>/dev/null || true)
-  if [ -n "$TOKEN" ]; then
-    for code in $(curl -sf http://localhost:8000/api/v1/banks -H "Authorization: Bearer $TOKEN" \
-        | jq -r '.[].code' 2>/dev/null || true); do
-      curl -sf -X POST "http://localhost:8000/api/v1/admin/banks/$code/provision" \
-        -H "Authorization: Bearer $TOKEN" \
-        >/dev/null && echo "   provisioned bank $code" || echo "   (provision $code: not yet — run from the CB portal)"
-    done
-  else
-    echo "   backend not up yet — provision banks from the CB portal later"
-  fi
-fi
-
-echo "==> [4/4] Banking backend + CB portal"
+echo "==> [4/5] Banking backend + CB portal"
 cd "$ROOT/backend"
 [ -d .venv ] || python3 -m venv .venv
 ./.venv/bin/pip install -q -r requirements.txt
@@ -85,8 +77,34 @@ cd "$ROOT/web"
 npm install --silent
 (setsid npm run dev > /tmp/sworna-web.log 2>&1 &)
 
+if [ "$PROVISION" = "1" ]; then
+  echo "==> [5/5] Provisioning wallet pools for registered banks"
+  for i in $(seq 1 60); do
+    if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then break; fi
+    sleep 2
+  done
+  TOKEN=$(curl -sf -X POST http://localhost:8000/api/v1/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"username":"cbadmin","password":"sworna-cb"}' | jq -r .token 2>/dev/null || true)
+  codes=""
+  if [ -n "$TOKEN" ]; then
+    codes=$(curl -sf http://localhost:8000/api/v1/banks -H "Authorization: Bearer $TOKEN" \
+        | jq -r '.[].code' 2>/dev/null || true)
+  fi
+  if [ -z "$codes" ]; then
+    echo "   registry is empty — no banks to provision."
+    echo "   Create banks via POST /api/v1/banks (or the portal), then:"
+    echo "     ./scripts/export-join-bundles.sh   # re-export their bundles"
+  fi
+  for code in $codes; do
+    curl -sf -X POST "http://localhost:8000/api/v1/admin/banks/$code/provision" \
+      -H "Authorization: Bearer $TOKEN" \
+      >/dev/null && echo "   provisioned bank $code" || echo "   (provision $code failed — retry from the CB portal)"
+  done
+fi
+
 echo "==> exporting per-bank join bundles (token wallets + orderer public certs)"
-"$ROOT/scripts/export-join-bundles.sh" || echo "   (export skipped — backend not ready yet; run scripts/export-join-bundles.sh later)"
+"$ROOT/scripts/export-join-bundles.sh" || echo "   (export skipped — run scripts/export-join-bundles.sh once banks exist)"
 
 echo
 echo "Central-bank host ready."
@@ -94,8 +112,11 @@ echo "  portal   http://localhost:5173   (login: cbadmin / sworna-cb)"
 echo "  backend  http://localhost:8000/docs"
 echo "  engine   http://localhost:8080"
 echo
-echo "Next:"
-echo "  1. each bank VM runs ./scripts/deploy-bank.sh <CODE>  -> produces <bank{k}>-org.json"
-echo "  2. import it here:  ./scripts/onboard-bank.sh Bank{k}MSP <path-to-org-json>"
-echo "  3. after all banks are onboarded:  ./scripts/commit-chaincode.sh"
-echo "  4. re-run the bank deploy scripts to join + start each bank's owner/portal"
+echo "Onboard a bank (while this host stays up):"
+echo "  1. create it:      POST /api/v1/banks  (code, name, msp_id=Bank{k}MSP, owner_node=owner{k}, staff_username)"
+echo "  2. provision:      POST /api/v1/admin/banks/<code>/provision  -> mints wallets + owner identity"
+echo "  3. bundle:         ./scripts/export-join-bundles.sh -> dist-bank-bundles/bank<CODE>.tar.gz -> bank VM"
+echo "  4. bank VM:        ./scripts/deploy-bank.sh <CODE>  -> produces bank{k}-org.json"
+echo "  5. here:           ./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json   (live, no downtime)"
+echo "  6. bank VM:        ./scripts/deploy-bank.sh <CODE> again  -> joins + starts owner/portal"
+echo "  7. here:           ./scripts/commit-chaincode.sh"

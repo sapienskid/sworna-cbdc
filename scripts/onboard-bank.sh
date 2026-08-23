@@ -1,17 +1,27 @@
 #!/usr/bin/env bash
 #
-# Add a commercial bank's org to the `settlement` channel on the CB host.
+# Add a commercial bank to the `settlement` channel ON THE LIVE NETWORK — no
+# downtime for the orderer, peers, ledger, or any existing bank.
 #
-# The bank self-provisions its org on its own VM and sends ONLY its public org
-# MSP JSON (from `configtxgen -printOrg`) here. This updates the channel config
-# to make the bank a member.
+# The bank self-provisions its Fabric org on its own VM and sends ONLY its
+# public org MSP JSON (`configtxgen -printOrg`). This script then:
+#   1. updates the channel config to admit the org            (live)
+#   2. regenerates cross-host DNS + re-renders the CB engine confs so the
+#      issuer/auditor can reach the new owner                 (~seconds)
+#   3. rolling-recreates the issuer/auditor containers        (~10-20 s)
+#
+# After this, run scripts/commit-chaincode.sh so the endorsement policy
+# includes the new bank.
 #
 # Usage: ./scripts/onboard-bank.sh <MSP> <org-json>
 #   e.g. ./scripts/onboard-bank.sh Bank3MSP bank3-org.json
+# Env:   SWORNA_OWNERS              all owner nodes (e.g. "owner1 owner2 owner3")
+#        SWORNA_OWNER_<NAME>_HOST   each bank VM's IP (drives the DNS override)
 set -euo pipefail
 
 MSP="${1:?usage: onboard-bank.sh <MSP> <org-json>}"
 ORG_JSON="${2:?usage: onboard-bank.sh <MSP> <org-json>}"
+[ -f "$ORG_JSON" ] || { echo "ERROR: org JSON not found: $ORG_JSON" >&2; exit 1; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NETWORK="$ROOT/network"
@@ -29,21 +39,45 @@ ARTIFACTS="$NETWORK/channel-artifacts"
 infoln "fetching channel config for '${CHANNEL}'"
 fetchChannelConfig 1 "$CHANNEL" "$ARTIFACTS/config.json"
 
-infoln "merging ${MSP} into the channel config"
-jq -s --arg MSP "$MSP" \
-  '.[0] * {"channel_group":{"groups":{"Application":{"groups":{($MSP): .[1]}}}}}' \
-  "$ARTIFACTS/config.json" "$ORG_JSON" > "$ARTIFACTS/modified_config.json"
+if jq -e --arg MSP "$MSP" '.channel_group.groups.Application.groups | has($MSP)' \
+     "$ARTIFACTS/config.json" >/dev/null; then
+  infoln "${MSP} is already a member of '${CHANNEL}' — nothing to do"
+else
+  infoln "merging ${MSP} into the channel config"
+  jq -s --arg MSP "$MSP" \
+    '.[0] * {"channel_group":{"groups":{"Application":{"groups":{($MSP): .[1]}}}}}' \
+    "$ARTIFACTS/config.json" "$ORG_JSON" > "$ARTIFACTS/modified_config.json"
 
-infoln "computing + signing the config update"
-createConfigUpdate "$CHANNEL" "$ARTIFACTS/config.json" "$ARTIFACTS/modified_config.json" "$ARTIFACTS/update_envelope.pb"
-signConfigtxAsPeerOrg 1 "$ARTIFACTS/update_envelope.pb"
+  createConfigUpdate "$CHANNEL" "$ARTIFACTS/config.json" "$ARTIFACTS/modified_config.json" "$ARTIFACTS/update_envelope.pb"
+  signConfigtxAsPeerOrg 1 "$ARTIFACTS/update_envelope.pb"
 
-infoln "submitting the config update to add ${MSP}"
-setGlobals 1
-peer channel update -f "$ARTIFACTS/update_envelope.pb" -c "$CHANNEL" \
-  -o localhost:7050 --ordererTLSHostnameOverride orderer.sworna.example.com \
-  --tls --cafile "$ORDERER_CA"
+  infoln "submitting the config update to add ${MSP}"
+  setGlobals 1
+  peer channel update -f "$ARTIFACTS/update_envelope.pb" -c "$CHANNEL" \
+    -o localhost:7050 --ordererTLSHostnameOverride orderer.sworna.example.com \
+    --tls --cafile "$ORDERER_CA"
+  successln "${MSP} added to channel '${CHANNEL}'"
+fi
 
-successln "${MSP} added to channel '${CHANNEL}'"
-echo "Next: on the bank VM run ./scripts/deploy-bank.sh <CODE> (joins + chaincode)."
-echo "After all banks are onboarded, commit the chaincode: ./scripts/commit-chaincode.sh"
+# ---- make the new owner reachable from the CB engine (live refresh) --------
+cd "$ROOT/token-services"
+export SWORNA_OWNERS="${SWORNA_OWNERS:?SWORNA_OWNERS (all owner nodes) must be set}"
+
+infoln "regenerating cross-host DNS override"
+python3 "$ROOT/scripts/gen-net-overrides.py" cb docker-compose.net.yaml
+
+infoln "re-rendering engine confs (owner resolvers)"
+for svc in auditor issuer; do
+  OWNERS="$SWORNA_OWNERS" \
+    python3 "$ROOT/scripts/render-owner-conf.py" "$svc/conf/core.yaml.tpl" > "$svc/conf/core.yaml"
+done
+
+infoln "rolling-recreate issuer + auditor (~10 s; ledger and banks unaffected)"
+docker compose -f docker-compose.yaml -f docker-compose.net.yaml up -d --force-recreate --no-deps issuer auditor
+
+echo
+echo "${MSP} is now a member of '${CHANNEL}' and reachable from the CB engine."
+echo "Next steps:"
+echo "  1. CB host /etc/hosts: 'owner$(basename "$MSP" | sed 's/Bank//;s/MSP//').sworna.example.com <bank-IP>' if not present"
+echo "  2. bank VM re-run:     ./scripts/deploy-bank.sh <CODE>   (joins + starts owner/portal)"
+echo "  3. here, commit:       ./scripts/commit-chaincode.sh     (includes ${MSP} in the policy)"

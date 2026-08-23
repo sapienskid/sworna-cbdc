@@ -94,17 +94,12 @@ enroll_org() {
 render_conf() {
   local tpl="$ROOT/token-services/owner/conf/core.yaml.tpl"
   local out="$ROOT/token-services/owner/conf/${OWNER_NODE}/core.yaml"
-  local demo=""
-  case "$k" in
-    1) demo="alice,bob" ;;
-    2) demo="carlos,dan" ;;
-  esac
   mkdir -p "$(dirname "$out")"
   log_info "rendering owner conf -> token-services/owner/conf/${OWNER_NODE}/core.yaml"
   OWNER_NODE="$OWNER_NODE" OWNER_INDEX="$k" BANK_ORG="$BANK_ORG" BANK_MSP="$BANK_MSP" \
     PEER_PORT="$BANK_PEER_PORT" OWNER_P2P="$OWNER_P2P_PORT" BANK_CODE="$BANK_CODE" \
-    POOL_SIZE="${POOL_SIZE:-10}" DEMO_WALLETS="$demo" \
-    OWNERS="${SWORNA_OWNERS:-owner1 owner2}" \
+    POOL_SIZE="${POOL_SIZE:-10}" DEMO_WALLETS="${DEMO_WALLETS:-}" \
+    OWNERS="${SWORNA_OWNERS:?SWORNA_OWNERS (all owner nodes) must be set}" \
     python3 "$ROOT/scripts/render-owner-conf.py" "$tpl" > "$out"
 }
 

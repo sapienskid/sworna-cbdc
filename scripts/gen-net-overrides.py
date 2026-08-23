@@ -18,7 +18,7 @@ import sys
 MODE = sys.argv[1] if len(sys.argv) > 1 else "cb"
 OUT = sys.argv[2] if len(sys.argv) > 2 else ""
 
-owners = [o for o in os.environ.get("SWORNA_OWNERS", "owner1 owner2").split() if o]
+owners = [o for o in os.environ.get("SWORNA_OWNERS", "").split() if o]
 
 
 def owner_host(node: str) -> str:

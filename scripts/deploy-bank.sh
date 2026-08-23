@@ -5,7 +5,7 @@
 #
 # Usage: ./scripts/deploy-bank.sh <CODE>      (e.g. 001, 002, 003, ...)
 # Env:   SWORNA_CB_HOST            IP of the central-bank VM (required)
-#        SWORNA_OWNERS             space-separated owner list (default "owner1 owner2")
+#        SWORNA_OWNERS             space-separated owner list, ALL banks (required)
 #        SWORNA_OWNER_<NAME>_HOST  bank VM IP for each owner, e.g.
 #                                  SWORNA_OWNER_OWNER1_HOST / SWORNA_OWNER_OWNER2_HOST
 #        POOL_SIZE                 wallet pool size (default 10)
@@ -15,7 +15,7 @@ BANK_CODE="${1:-${BANK_CODE:-}}"
 [ -n "$BANK_CODE" ] || { echo "usage: $0 <CODE>  (e.g. 001, 002, ...)" >&2; exit 1; }
 export BANK_CODE
 export SWORNA_CB_HOST="${SWORNA_CB_HOST:?SWORNA_CB_HOST (central-bank VM IP) is required}"
-export SWORNA_OWNERS="${SWORNA_OWNERS:-owner1 owner2}"
+export SWORNA_OWNERS="${SWORNA_OWNERS:?SWORNA_OWNERS (space-separated list of ALL owner nodes) is required}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="$ROOT/bin:$PATH"
