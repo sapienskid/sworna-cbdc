@@ -110,7 +110,11 @@ This document describes the architectural design of the Sworna CBDC prototype. I
 
 ## 7. Deployment plan
 
-- **Prototype (Phase 3):** everything on one/two laptops with Docker Compose; orderers + peers + token services + FastAPI + React + explorer. Stretch: spread CB / banka / bankb across 3 lab machines over the LAN.
+- **Prototype (Phase 3):** the deployment is **distributed** — CB host + one VM
+  per bank (each bank runs its own peer, CA, chaincode and owner service; the CB
+  host runs orderer + central-bank peer + token CA + issuer/auditor + backend).
+  All-in-one on a single dev laptop is used **only for local testing**, never as
+  a deployment. See [DEPLOYMENT.md](DEPLOYMENT.md) / [SETUP.md](SETUP.md).
 - **Comprehensive (Phase 4):** distribute across the 25-machine lab (8–16 GB RAM / 4–8 cores each). Roles: orderer hosts, peer hosts, CA hosts, token-service hosts, FastAPI/UI hosts, explorer/monitoring hosts. Per-host compose files or Ansible; documented ports and firewall requirements.
 - **Considerations:** peers are RAM-hungry (≈2 GB+ each, plus CouchDB); Cap memory; run peers on dedicated hosts in the lab.
 

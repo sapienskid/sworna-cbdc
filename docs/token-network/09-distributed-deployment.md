@@ -3,8 +3,9 @@
 > **Status: IMPLEMENTED — pending live validation.** The scripts, compose files
 > and join-bundle flow below are in the repo and pass static validation, but the
 > cross-host run (bank peers on their own VMs reaching the CB host) has not yet
-> been exercised on real VMs. Until the §4 checklist passes, treat the all-in-one
-> deployment as the validated reference — see [SETUP.md](../SETUP.md).
+> been exercised on real VMs. Until the §4 checklist passes, the dev-laptop
+> all-in-one (testing only) remains the validated reference — see
+> [SETUP.md](../SETUP.md).
 
 ## 1. Host → role map
 
@@ -97,7 +98,7 @@ When this checklist passes, promote the status at the top of this file.
 
 ## 5. Related docs
 
-- [SETUP.md](../SETUP.md) — the all-in-one runbook (validated)
+- [SETUP.md](../SETUP.md) — the dev-laptop testing runbook (validated)
 - [DEPLOYMENT.md](../DEPLOYMENT.md) — roles, ports, progression
 - [08-provisioning.md](08-provisioning.md) — wallet pools & the join bundle
 - [05-engine-deep-dive.md](05-engine-deep-dive.md) — the Go engine's hostnames

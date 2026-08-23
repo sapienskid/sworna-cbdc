@@ -37,10 +37,11 @@ runbook is [docs/SETUP.md](docs/SETUP.md); read it before doing anything.
 
 Success = the checks in [docs/SETUP.md](docs/SETUP.md) §6 pass. Read
 `/tmp/sworna-backend.log` and `/tmp/sworna-web.log` plus `docker logs` on
-failure. Distributed (cross-VM) networking is implemented but not yet validated
-live — for now assume all-in-one hosts unless
+failure. The deployment is always **distributed** (CB + bank VMs); all-in-one
+(no `--distributed`) is dev-laptop testing only. Cross-VM networking is
+implemented but not yet validated live — run
 [docs/token-network/09-distributed-deployment.md](docs/token-network/09-distributed-deployment.md)
-§4 has passed.
+§4 before the demo day.
 
 ## Known failure modes → fixes
 

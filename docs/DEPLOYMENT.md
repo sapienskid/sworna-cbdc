@@ -53,7 +53,7 @@ Provisioning is idempotent — re-run to top up a pool.
 
 ## 4. Bring-up sequence
 
-**Distributed (3 VMs) — the target:**
+**The deployment — distributed (3 VMs):**
 
 ```bash
 # CB VM
@@ -70,15 +70,17 @@ export SWORNA_CB_HOST=<CB-IP> SWORNA_BANKA_HOST=<BANK-A-IP>
 ./scripts/deploy-bankb.sh
 ```
 
-**All-in-one (dev laptop):** `./scripts/deploy-centralbank.sh --provision`
-(no `--distributed`), then run the owners locally:
+**Dev-laptop testing only (NOT a deployment):** on a single dev laptop, run
+`./scripts/deploy-centralbank.sh --provision` (no `--distributed`) to keep
+everything local for testing, then run the owners locally:
 
 ```bash
 cd token-services && docker compose -f docker-compose.bank.yaml up -d --build owner1 owner2
 ./scripts/demo.sh                             # issue -> transfers -> redeem
 ```
 
-The demo's cross-bank flows need owner1/owner2 running somewhere.
+The demo's cross-bank flows need owner1/owner2 running somewhere (bank VMs in a
+deployment, or locally for dev testing).
 
 ## 5. Distributed networking
 
@@ -109,9 +111,13 @@ Services bind `0.0.0.0`, so on lab VMs the portals/backend are reachable at
 
 ## 7. Progression
 
-- **Dev (this repo, one laptop):** all-in-one — everything we test on.
-- **Lab demo (3 VMs):** the split above — each bank runs its own peer/CA/owner;
-  cross-host DNS is [09-distributed-deployment.md](token-network/09-distributed-deployment.md).
+- **Dev (this repo, one laptop):** all-in-one is used **only for local testing**
+  on a dev laptop (run `deploy-centralbank.sh` without `--distributed`). It is
+  never a deployment — the CB and every bank are always separated onto their own
+  hosts.
+- **Lab demo (3 VMs):** the deployment — CB host + one VM per bank; each bank
+  runs its own peer/CA/owner. Cross-host DNS is
+  [09-distributed-deployment.md](token-network/09-distributed-deployment.md).
 - **Comprehensive (up to 25 machines):** more orderers, CouchDB, monitoring,
   Ansible — Phase 4.
 

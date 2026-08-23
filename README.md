@@ -92,13 +92,17 @@ export SWORNA_CB_HOST=<CB-IP> SWORNA_BANKB_HOST=<BANK-B-IP>
 ./scripts/deploy-banka.sh                             # peer+CA+chaincode+owner+portal
 ```
 
-**All-in-one (dev laptop):** run `deploy-centralbank.sh --provision` (no
-`--distributed`), then start the owners locally and run the demo:
+**Dev-laptop testing only (NOT a deployment):** on a single dev laptop, run
+`deploy-centralbank.sh --provision` (no `--distributed`), then start the owners
+locally and run the demo:
 
 ```bash
 cd token-services && docker compose -f docker-compose.bank.yaml up -d --build owner1 owner2
 ./scripts/demo.sh                                     # issue -> transfers -> redeem
 ```
+
+The deployment is always **distributed** — the CB and every bank are separated
+onto their own hosts; all-in-one is for local dev testing only.
 
 Fresh clones are handled automatically: `token-services/keys/` is gitignored,
 so `deploy-centralbank.sh` enrolls the token identities once before starting

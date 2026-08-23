@@ -139,19 +139,17 @@ Expected: `hyperledger/fabric-{peer,orderer,ccenv,baseos}:3.1.5` and
 
 ## 3. Central-bank host bring-up
 
-Run on the CB host (all-in-one dev laptop, or the CB VM):
+Run on the CB VM (the deployment — each bank always runs on its own VM):
 
 ```bash
 cd ~/CBDC
 ./scripts/deploy-centralbank.sh --provision --distributed
 ```
 
-- `--distributed` (bank VMs): after the network + chaincode are set up, the
-  **bank peers/CAs/chaincode are stopped and removed from the CB host** and each
-  bank's join bundle is exported to `dist-bank-bundles/` (see §4.3). This is the
-  mode for the 3-VM lab.
-- Without `--distributed` (all-in-one dev laptop): the bank peers stay on the CB
-  host and everything runs on one machine.
+`--distributed` is the deployment mode: after the network + chaincode are set
+up, the **bank peers/CAs/chaincode are stopped and removed from the CB host** and
+each bank's join bundle is exported to `dist-bank-bundles/` (see §4.3). The
+banks then run entirely on their own VMs (§5).
 
 The script does (see the script header for the canonical list):
 
@@ -423,6 +421,7 @@ Rules for operating this stack without human back-and-forth:
   `SWORNA_CB_HOST` and the sibling bank IP (cross-bank `extra_hosts`); fail fast
   if missing.
 - **Cross-host networking:** implemented via compose `extra_hosts`, but not yet
-  validated on real VMs — for now assume all-in-one hosts unless
+  validated on real VMs. The deployment is always distributed (CB + bank VMs);
+  all-in-one (no `--distributed`) is dev-laptop testing only. Validate
   [09-distributed-deployment.md](token-network/09-distributed-deployment.md) §4
-  has passed.
+  before the demo day.

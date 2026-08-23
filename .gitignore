@@ -28,8 +28,11 @@ network/bin/
 network/config/
 network/organizations/peerOrganizations/
 network/organizations/ordererOrganizations/
-network/organizations/fabric-ca/
+network/organizations/fabric-ca/org1/
+network/organizations/fabric-ca/org2/
+network/organizations/fabric-ca/ordererOrg/
 network/organizations/ca/
+network/addOrg3/fabric-ca/org3/
 *.block
 channel-artifacts/
 ledger-data/

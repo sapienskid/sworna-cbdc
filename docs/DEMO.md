@@ -1,8 +1,8 @@
 # DEMO — Scenario & runbook
 
 > **Status: v2 (banking).** Verified on the dev laptop 2026-08-22. Requires the
-> token engine **including owner1/owner2** to be running (all-in-one host, or CB
-> + bank VMs). Setup: [SETUP.md](SETUP.md).
+> token engine **including owner1/owner2** to be running (on the bank VMs in a
+> deployment, or locally for dev testing). Setup: [SETUP.md](SETUP.md).
 
 ## Demo objective
 
@@ -27,18 +27,17 @@ A guided ~10-minute walkthrough of the two-tier banking system with ZK privacy:
 
 ## Running it
 
-**All-in-one host** (dev laptop — everything on one machine):
+**Deployment (3 VMs):** deploy the CB (`./scripts/deploy-centralbank.sh --provision
+--distributed`) and each bank on its own VM (`deploy-banka.sh` / `deploy-bankb.sh`).
+Then run `./scripts/demo.sh` from the CB host (it talks to the backend on localhost).
+
+**Dev-laptop testing only:** everything on a single dev laptop —
 
 ```bash
 ./scripts/deploy-centralbank.sh --provision   # network, chaincode, identities, issuer/auditor, backend, portal
 cd token-services && docker compose -f docker-compose.bank.yaml up -d --build owner1 owner2   # owners needed for transfers/redeem
 ./scripts/demo.sh                             # issue → transfers → redeem
 ```
-
-**Distributed (3 VMs):** deploy the CB (`--provision --distributed`) then each
-bank on its own VM (`deploy-banka.sh` / `deploy-bankb.sh`) — the owners run
-there. Then run `./scripts/demo.sh` from the CB host (it talks to the backend
-on localhost).
 
 > Without owner1/owner2 the demo cannot run — the CB-only deployment supports
 > provisioning and issuance setup, not retail transfers.
