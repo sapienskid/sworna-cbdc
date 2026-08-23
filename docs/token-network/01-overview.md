@@ -1,15 +1,16 @@
 # Token network — overview
 
 This series documents the Sworna token network as built in Phase 3: how money is
-created, held, moved and destroyed on a **3-organization Hyperledger Fabric**
-settlement network with **zero-knowledge privacy** and a central-bank **auditor**.
+created, held, moved and destroyed on a **Hyperledger Fabric** settlement network
+(central-bank org + any number of self-provisioned commercial banks) with
+**zero-knowledge privacy** and a central-bank **auditor**.
 
 The network has two layers:
 
 ```
-  Layer 2  token network   issuer · auditor · owner1 · owner2   (the Go engine)
-              │                    │        REST                 
-  Layer 1  settlement      peer0.centralbank · peer0.banka · peer0.bankb
+  Layer 2  token network   issuer · auditor · owner{k}   (the Go engine, one owner per bank)
+              │                    │        REST
+  Layer 1  settlement      peer0.centralbank · peer0.bank{k}
               │                    │        channel `settlement`
   ledger     Fabric v3.1.5 · tokenchaincode (ZKAT-DLOG) · Raft orderer
 ```
@@ -20,9 +21,13 @@ The network has two layers:
 |---|---|---|---|
 | **Issuer** | central bank | x.509 (token CA) | mints and burns SWR |
 | **Auditor** | central bank | x.509 (token CA) | signs/oversees **every** transaction |
-| **Owner 1** | Bank A | idemix wallet (alice, bob) | holds and transfers SWR |
-| **Owner 2** | Bank B | idemix wallet (carlos, dan) | holds and transfers SWR |
-| **Chaincode** | all 3 peers | ZKAT-DLOG params | validates proofs, owns the UTXO ledger |
+| **Owner `k`** | bank `k` | idemix wallets (customers) | holds and transfers SWR |
+| **Chaincode** | every org's peer | ZKAT-DLOG params | validates proofs, owns the UTXO ledger |
+
+The demo seeds two banks (`owner1` = banka, `owner2` = bankb); more are added via
+`scripts/deploy-bank.sh` + `scripts/onboard-bank.sh` (each bank self-provisions
+its Fabric org and the CB adds it to the channel — see
+[SETUP.md](../SETUP.md) §4).
 
 ## Money model
 
@@ -57,7 +62,7 @@ amounts or party names (verified in M2).
 ## Repo layout
 
 ```
-network/           our 3-org Fabric network (configtx, CAs, compose, scripts)
+network/           our Fabric network (configtx, CAs, compose, scripts)
 token-services/    the Go engine (issuer/auditor/owner + tokenchaincode)
 backend/           Python FastAPI banking core
 web/               React wallet + CB/bank consoles

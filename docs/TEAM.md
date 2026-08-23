@@ -17,7 +17,7 @@ How we split the work into tracks, who owns which code, how the tracks integrate
 
 | Track | Size | Best-fit skills | Owns (code) | Delivers |
 |---|---|---|---|---|
-| **T1 Ledger & Network** | 3 (incl. the Go/Rust person) | Docker, some Go, reads Fabric docs | `network/`, `token-services/`, `explorer/` | Running 3-org network + working issue/transfer/redeem REST |
+| **T1 Ledger & Network** | 3 (incl. the Go/Rust person) | Docker, some Go, reads Fabric docs | `network/`, `token-services/` | Running settlement network (CB org + N self-provisioned banks) + working issue/transfer/redeem REST |
 | **T2 Backend (Python)** | 3 | Python, FastAPI | `backend/` | All banking APIs (registry, payments, admin, reports) |
 | **T3 Frontend (React)** | 3 | JS/React | `web/` | Customer wallet + central-bank console + bank console |
 | **T4 DevOps / Deployment** | 2 | Linux, bash, Docker | `scripts/`, per-host compose | One-command bring-up; 1-laptop → 3-host → 25-host |
@@ -36,7 +36,7 @@ How we split the work into tracks, who owns which code, how the tracks integrate
 - `network/organizations/` — Fabric CA configs + identity-enrollment scripts (certificates for central bank, Bank A, Bank B).
 - `network/compose/` — docker-compose for peers / orderers / CAs.
 - Token chaincode **deployment** (reused from the sample, not written): `tokengen` parameters (issuer = CB, auditor = CB, bank CAs), SWR token type (2 decimals), wallets (alice/bob/carol/dan).
-- Token services configuration: issuer (`:9100`), auditor (`:9000`), owner (`:9200`/`:9300`).
+- Token services configuration: issuer (`:9100`), auditor (`:9000`), one owner per bank (`owner{k}`, REST `:9200+100(k−1)`), confs rendered from `core.yaml.tpl`.
 - Blockchain Explorer configuration.
 - **Never touches** `backend/` or `web/`.
 
@@ -89,7 +89,7 @@ The full endpoint catalog lives in [API.md](API.md). Contracts must be frozen be
 ## 5. Dependency order & critical path
 
 ```
-T1 network+token ──► token REST (:9000/:9100/:9200/:9300)
+T1 network+token ──► token REST (:9000/:9100 + per-bank owner REST)
                           │
                           ▼
    T2 backend ──► backend REST (:8000) ──► T3 frontend
@@ -105,7 +105,7 @@ T1 network+token ──► token REST (:9000/:9100/:9200/:9300)
 
 | Week | T1 | T2 | T3 | T4 | T5 | T6 |
 |---|---|---|---|---|---|---|
-| **1** | 3-org network + tokens + explorer | Backend registry + admin (against mock) | Wallet skeleton + mocked backend | Bring-up scripts, dev compose | Contract tests (against mock) | Draft runbook |
+| **1** | settlement network (CB org + banks) + tokens | Backend registry + admin (against mock) | Wallet skeleton + mocked backend | Bring-up scripts, per-host compose | Contract tests (against mock) | Draft runbook |
 | **2** | Hardening, cross-org flow verified | Wire backend → real token services | Wire UI → real backend | 3-host lab deployment | Full e2e + demo dry-run | Final demo script, docs sync |
 
 ## 7. Notes for an undergraduate team

@@ -60,36 +60,36 @@ This document is the master roadmap. Each phase has a goal, a task list, exit cr
 
 ## Phase 3 — Initial prototype demo (2 weeks)
 
-**Goal:** a guided demo — central bank issues SWR, two commercial banks, customer-to-customer payments (including cross-bank), redemption — on a 3-organization Fabric network.
+**Goal:** a guided demo — central bank issues SWR, commercial banks, customer-to-customer payments (including cross-bank), redemption — on the `settlement` channel. **Delivered (2026):** CB org1-only network + any number of banks, each self-provisioning its own Fabric org on its own VM (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 
-### Week 1 — Custom 3-org network + token layer
+### Week 1 — Settlement network + token layer
 
 | # | Task | Detail |
 |---|---|---|
-| W1.1 | 3-org network definition | `configtx.yaml` with MSPs `CentralBankMSP`, `BankAMSP`, `BankBMSP`; domain `sworna.example.com`; use **Fabric CA per org** (`-ca` pattern) [R3]. |
-| W1.2 | Raft ordering cluster | 3 orderers (`orderer0/1/2`); all on the CB host for week 1; document spreading across hosts for the lab demo. |
-| W1.3 | Single `settlement` channel | All 3 orgs join; deploy the **token chaincode** with `tokengen` parameters (issuer = CB, auditor = CB, owner idemix CAs = banks) [R13]. |
-| W1.4 | Token services | issuer node (CB), auditor node (CB), owner node A (banka: alice, bob), owner node B (bankb: carol, dan); configure **SWR** token type with **2 decimals**. |
-| W1.5 | Cross-org flow test | CB issues 10,000 SWR → banka; alice → bob (intra-bank); bob → carol (cross-bank); carol → CB redeem. All via REST [R13]. |
-| W1.6 | Explorer | Connect the blockchain explorer to the settlement channel [R13]. |
-| W1.7 | Version pinning | Freeze sample commit hashes + Fabric image tags. |
+| W1.1 | Network definition | CB host runs the **central-bank org only** (`CentralBankMSP`); each bank self-provisions `Bank{k}MSP` on its own VM and is added to the channel via `scripts/onboard-bank.sh`. Domain `sworna.example.com`; **Fabric CA per org** (`-ca` pattern) [R3]. |
+| W1.2 | Raft ordering cluster | Single orderer on the CB host for the prototype; spread across hosts in Phase 4. |
+| W1.3 | Single `settlement` channel | The CB creates the channel with org1 and adds each bank's org via a config update; the token chaincode is committed with an OR endorsement policy (`scripts/commit-chaincode.sh`) [R13]. |
+| W1.4 | Token services | issuer (CB), auditor (CB), and one owner node per bank (`owner{k}`, conf rendered from `core.yaml.tpl`); configure **SWR** with **2 decimals**. |
+| W1.5 | Cross-org flow test | CB issues SWR → a bank customer; intra-bank transfer; cross-bank transfer; redeem. All via REST [R13]. |
+| W1.6 | Explorer | Dropped — Fabric v3 incompatible; ledger activity surfaces via the CB portal's Ledger page. |
+| W1.7 | Version pinning | Fabric 3.1.5 / CA 1.5.22 pinned via `scripts/install-fabric-tools.sh`. |
 
-**Exit criteria:** SWR issued/transferred/redeemed across all 3 orgs with ZK intact; explorer shows blocks.
+**Exit criteria:** SWR issued/transferred/redeemed with ZK intact across the CB + every onboarded bank.
 
 ### Week 2 — Banking layer (Python/FastAPI) + UI (React)
 
 | # | Task | Detail |
 |---|---|---|
-| W2.1 | FastAPI backend | Customer/bank/account registry (SQLite); wraps owner/issuer/auditor REST APIs; seeds demo users (alice, bob, carol, dan + accounts). |
+| W2.1 | FastAPI backend | Customer/bank/account registry (SQLite); wraps owner/issuer/auditor REST APIs (owner URLs derived from the owner node — `app/owner_urls.py`); seeds demo banks 001/002 + accounts. |
 | W2.2 | Basic AML flags | Demo-level account `status` (active / flagged / frozen) + a transfer limit check in the backend (not on-chain yet). |
-| W2.3 | Admin console (React) | CB: issue/redeem, total supply + per-bank circulation, ledger monitor (explorer link); bank view: customers, balances, activity. |
+| W2.3 | Admin console (React) | CB: issue/redeem, total supply + per-bank circulation, ledger monitor; bank view: customers, balances, activity. |
 | W2.4 | Wallet SPA (React) | Customer login; balance, send, receive, transaction history (served by FastAPI). |
-| W2.5 | Demo scenario + seed script | One-command reset & seed: issue → distribute → retail transfers → cross-bank payment → redeem. Write `docs/DEMO.md`. |
-| W2.6 | Tests | Happy-path e2e covering both REST layers (token-sdk + FastAPI); basic load smoke test. |
-| W2.7 | Documentation | Finalize ARCHITECTURE.md, API.md, PHASES.md, ADRs 0001–0009. |
-| W2.8 | Stretch: distributed demo | Run CB host, banka host, bankb host across 3 lab machines over the LAN. |
+| W2.5 | Demo scenario + seed script | One-command issue → distribute → retail transfers → cross-bank payment → redeem. `docs/DEMO.md` + `scripts/demo.sh`. |
+| W2.6 | Tests | Happy-path e2e covering both REST layers (token engine + FastAPI). |
+| W2.7 | Documentation | ARCHITECTURE.md, API.md, PHASES.md, SETUP/DEPLOYMENT runbooks, ADRs 0001–0009. |
+| W2.8 | Distributed demo | CB host + one VM per bank; cross-host DNS via generated `extra_hosts` + `/etc/hosts`. |
 
-**Exit criteria (demo day):** a 10-minute guided demo; admin console + wallet + explorer visible; docs complete.
+**Exit criteria (demo day):** a guided demo; admin console + wallet visible; docs complete.
 
 **Sources:** [R3] test network; [R13] token-sdk sample.
 
@@ -200,7 +200,7 @@ QR and merchant payments, request money, top-up/cash-out, statements, notificati
 |---|---|
 | 1 | README, PHASES, ARCHITECTURE, FULL-BANKING-SYSTEM, API, DEMO, BENCHMARKS, REFERENCES, ADRs 0001–0009 |
 | 2 | Running token-sdk sample; pinned-version setup; verified ZK/REST/explorer |
-| 3 | 3-org network + SWR token layer + FastAPI backend + React wallet/admin console + explorer + tests + DEMO runbook |
+| 3 | Settlement network (CB + N self-provisioned banks) + SWR token layer + FastAPI backend + React wallet/admin console + tests + SETUP/DEMO runbooks |
 | 4 | Comprehensive system: SmartBFT, multi-channel, compliance engine, settlement, distributed lab deployment, monitoring, CI |
 | 5 | Benchmark report, tuning guide, Fabric-X evaluation, security hardening |
 | 6 | Roadmap doc (evolves as research completes) |

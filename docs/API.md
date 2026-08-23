@@ -5,9 +5,11 @@ Two REST surfaces:
 1. **Banking backend (FastAPI, `:8000`)** — the user-facing API: auth, banks,
    accounts, payments by account number, admin, provisioning. This is what the
    portals talk to.
-2. **Token engine (Go, `:9000/:9100/:9200/:9300`)** — the settlement layer
-   (issue/transfer/redeem with ZK). The backend proxies to it; see
-   `docs/token-network/06-api-contracts.md` for its contracts.
+2. **Token engine (Go)** — the settlement layer (issue/transfer/redeem with ZK):
+   issuer/auditor `:9100`/`:9000` on the CB host, and each bank's owner REST at
+   `:9200+100(k−1)` on its own VM. The backend resolves owner URLs from the
+   owner node name (`app/owner_urls.py`); see
+   `docs/token-network/06-api-contracts.md` for the engine's contracts.
 
 Interactive docs: backend `http://localhost:8000/docs` · engine `:8080`.
 

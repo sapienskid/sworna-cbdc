@@ -60,10 +60,11 @@ Logins: CB `cbadmin`/`sworna-cb` · bank staff `banka_admin`/`bankb_admin`/
 | Port | Service |
 |---|---|
 | 7050 / 7053 | orderer |
-| 7051 / 9051 / 11051 | peers (centralbank / banka / bankb) |
-| 7054 / 8054 / 9054 | Fabric CAs |
+| 7051 / 9051+2000(k−1) | peer0.centralbank / peer0.bank{k} |
+| 7054 / 9054 / 8054+1000(k−1) | ca_org1 · ca_orderer / ca_bank{k} |
 | 27054 | token CA |
-| 9000 / 9100 / 9200 / 9300 | auditor / issuer / owner1 / owner2 |
+| 9000 / 9100 | auditor / issuer (CB) |
+| 9200+100(k−1) | owner{k} REST |
 | 8000 | FastAPI backend (`/docs`) |
 | 5173 | portals (dev) |
 

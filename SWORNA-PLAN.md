@@ -226,10 +226,8 @@ The system exposes REST APIs in two places: the **token services** (perform the 
 | 8080 | Interactive API documentation (Swagger) |
 | 9000 | Auditor service (central bank supervision) |
 | 9100 | Issuer service (central bank issuance) |
-| 9200 | Bank A service (owner node — alice, bob) |
-| 9300 | Bank B service (owner node — carol, dan) |
+| 9200+100(k−1) | Owner service for bank `k` (demo: 9200 owner1/banka, 9300 owner2/bankb) |
 | 8000 | Banking backend (FastAPI) |
-| 8081 | Blockchain Explorer |
 
 ### 9.2 Token services (money operations)
 
@@ -241,7 +239,7 @@ The system exposes REST APIs in two places: the **token services** (perform the 
 | GET | `/api/v1/issuer/history` | Issuance history |
 | POST | `/api/v1/issuer/redeem` | Destroy (burn) SWR tokens |
 
-**Owner services (banks) — `:9200`, `:9300`**
+**Owner services (banks) — `:9200`/`:9300`/… per bank `k`**
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -326,8 +324,8 @@ Note the token model: Alice's 1,000 SWR input is split into 100 (to Dan) and 900
 | Entity | Fields |
 |---|---|
 | `customer` | id, name, phone, bank, kycStatus (pending/verified), accountStatus (active/flagged/frozen), created |
-| `account` | id, customerId, bankId, ownerNode (owner1/owner2), walletName (e.g. alice), tokenType (SWR), created |
-| `bank` | id (banka/bankb), msp (BankAMSP/BankBMSP), ownerNode, created |
+| `account` | id, customerId, bankId, ownerNode (owner{k}), walletName (e.g. alice), tokenType (SWR), created |
+| `bank` | id (001/002), name (banka/bankb), msp (Bank1MSP/Bank2MSP), ownerNode (owner1/owner2), created |
 | `transactionLog` | id, fromAccount, toAccount, amount, status, tokenTxId, timestamp |
 
 ## 10. Team structure

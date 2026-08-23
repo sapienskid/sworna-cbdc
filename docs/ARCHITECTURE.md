@@ -25,11 +25,13 @@ This document describes the architectural design of the Sworna CBDC prototype. I
 |---|---|---|---|---|
 | Currency issuer | Central bank | `centralbank` / `CentralBankMSP` | issuer node (REST :9100) | issuer x509 identity |
 | Supervisor / AML | Central bank | `centralbank` | auditor node (REST :9000) | auditor x509 identity |
-| Commercial bank A | Bank A | `banka` / `BankAMSP` | owner node A (REST :9200) | customers alice, bob (idemix) |
-| Commercial bank B | Bank B | `bankb` / `BankBMSP` | owner node B (REST :9300) | customers carol, dan (idemix) |
+| Commercial bank `k` | Bank `k` | `bank{k}` / `Bank{k}MSP` | owner node `owner{k}` (REST :9200+100(k−1)) | customers (idemix wallets) |
 | Customers | on bank owner nodes | — | wallet SPA via FastAPI | idemix credentials [R13] |
 
-- Network domain: `sworna.example.com` (e.g., `orderer0.sworna.example.com`, `peer0.centralbank.sworna.example.com`, `peer0.banka.sworna.example.com`).
+- Network domain: `sworna.example.com` (e.g., `orderer.sworna.example.com`,
+  `peer0.centralbank.sworna.example.com`, `peer0.bank{k}.sworna.example.com`).
+- Any number of commercial banks is supported; the demo seeds banks `001`
+  (`banka`, `Bank1MSP`, `owner1`) and `002` (`bankb`, `Bank2MSP`, `owner2`).
 - Identity model: Fabric CA per organization (more realistic than cryptogen; test-network supports this via the `-ca` flag) [R3]. Customer wallets use **idemix** credentials issued by a CA known to the token chaincode [R13].
 
 ## 4. Component inventory
@@ -44,7 +46,8 @@ This document describes the architectural design of the Sworna CBDC prototype. I
 ### 4.2 Layer 1 — Fabric settlement network
 
 - **Ordering service**: Raft cluster (3 orderers) in the prototype; SmartBFT (4+ consenters, V3_0 capabilities) in Phase 4 [R1][R2].
-- **Peers**: one per organization (`centralbank`, `banka`, `bankb`), **CouchDB** state database (ADR-0007) [R3].
+- **Peers**: one per organization (`centralbank` on the CB host; each bank's
+  `peer0.bank{k}` on its own VM), LevelDB state database (CouchDB in Phase 4).
 - **Token chaincode**: deployed on the `settlement` channel; validates all ZK proofs and signatures and commits the transaction [R13].
 - **Channels**: single `settlement` channel in the prototype (ADR-0002); expanded to `settlement` + `retail` + `registry/KYC` with Private Data Collections in Phase 4.
 
@@ -70,21 +73,20 @@ This document describes the architectural design of the Sworna CBDC prototype. I
                                     │ HTTP (REST)
           ┌─────────────────────────┼─────────────────────────┐
           │                         │                         │
- ┌────────┴────────┐     ┌──────────┴─────────┐     ┌─────────┴────────┐
- │  owner node A   │     │   owner node B     │     │  owner node...   │
- │  banka (alice,  │     │   bankb (carol,    │     │  (customers)     │
- │  bob)  :9200    │     │   dan)  :9300      │     │  :9400           │
- └────────┬────────┘     └──────────┬─────────┘     └─────────┬────────┘
+┌────────┴────────┐     ┌──────────┴─────────┐     ┌─────────┴────────┐
+  │  owner node 1   │     │   owner node 2     │     │  owner node k    │
+  │  bank1          │     │   bank2            │     │  (any number)    │
+  │  REST :9200     │     │   REST :9300       │     │  REST :9200+100(k−1)│
+  └────────┬────────┘     └──────────┬─────────┘     └─────────┬────────┘
           │          libp2p (peer-to-peer, private txns)       │
           └────────────────────────┼──────────────────────────┘
                                    │
         ┌──────────────────────────┼──────────────────────────┐
         │          FABRIC NETWORK — single channel "settlement"│
-        │   orderers (Raft x3)  peers (CB, banka, bankb)      │
-        │   token chaincode (UTXO + ZK proofs verified here)  │
+        │   orderer (Raft)  peers (CB, bank1, bank2, … bankk)  │
+        │   token chaincode (UTXO + ZK proofs verified here)   │
         └─────────────────────────────────────────────────────┘
 
-  Blockchain explorer (:8081) watches the settlement channel.
   React wallet SPA ← FastAPI ← owner-node REST APIs.
 ```
 

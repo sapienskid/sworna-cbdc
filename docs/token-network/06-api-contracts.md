@@ -3,7 +3,7 @@
 Two REST layers:
 
 ```
-React UI ──► FastAPI (:8000) ──► Go engine (9000/9100/9200/9300) ──► Fabric
+React UI ──► FastAPI (:8000) ──► Go engine (issuer/auditor :9000/:9100 + per-bank owner) ──► Fabric
 ```
 
 ## Layer 1: FastAPI banking API (`backend/app/routers`)
@@ -36,8 +36,9 @@ React UI ──► FastAPI (:8000) ──► Go engine (9000/9100/9200/9300) ─
 ### Conventions
 - **Amounts** are `Decimal` in major units of SWR at the API boundary,
   converted to integer minor units before hitting the engine (`app/amounts.py`).
-- Bank name (`banka`/`bankb`) maps to owner node (`owner1`/`owner2`) via the
-  `banks` table; the `owner_nodes` mapping lives in `app/config.py`.
+- A bank (`code`, `owner_node`) maps to its owner node via the `banks` table;
+  the owner REST URL is derived from the node name (`app/owner_urls.py`,
+  e.g. `owner3` → `http://owner3.sworna.example.com:9400/api/v1`).
 
 ## Layer 2: engine contracts (Go services)
 
@@ -48,11 +49,11 @@ All amounts are integer minor units; token code is `SWR`.
 POST /issuer/issue
 { "amount": {"code":"SWR","value":10000},
   "counterparty": {"node":"owner1","account":"alice"},
-  "message": "CB issues SWR to banka" }
+  "message": "CB issues SWR to bank 001" }
 → { "message": "...", "payload": "<txid>" }
 ```
 
-### owner (:9200 owner1, :9300 owner2)
+### owner (one per bank, e.g. :9200 owner1, :9300 owner2, :9400 owner3)
 ```json
 POST /owner/accounts/alice/transfer
 { "amount": {"code":"SWR","value":2000},

@@ -128,7 +128,7 @@ See [docs/DEMO.md](docs/DEMO.md) for the runbook and [docs/token-network/](docs/
 | Framework | **Hyperledger Fabric v3.1.x** (chaincode layer) |
 | Ordering | **Raft** for the initial prototype → **SmartBFT (BFT)** in the comprehensive phase (ADR-0003) |
 | Channels | Single `settlement` channel for the prototype → multiple channels later (ADR-0002) |
-| Organizations | `centralbank` (CentralBankMSP), `banka` (BankAMSP), `bankb` (BankBMSP); customers are wallet identities on bank owner nodes |
+| Organizations | `centralbank` (CentralBankMSP) + any number of banks (`Bank{k}MSP`, self-provisioned on their own VMs); customers are wallet identities on bank owner nodes |
 | Roles | Central bank = **issuer + auditor**; commercial banks = **owner** nodes (ADR-0004) |
 | Token layer | Reuse the **fabric-samples `token-sdk`** sample (prebuilt chaincode + REST services) (ADR-0001) |
 | On-chain language | **Go** (prebuilt token-sdk chaincode, ~zero custom Go) |
@@ -136,7 +136,7 @@ See [docs/DEMO.md](docs/DEMO.md) for the runbook and [docs/token-network/](docs/
 | State DB | **CouchDB** (ADR-0007) |
 | Frontend | **React SPA** (customer wallet + central-bank/bank admin consoles) |
 | Domain | `sworna.example.com` |
-| Deployment | Laptops first, then distributed across the 25-machine lab (8–16 GB RAM / 4–8 cores each) |
+| Deployment | Distributed: CB host + one VM per bank (any number of banks); all-in-one on a dev laptop is testing only |
 | Benchmarking | **Hyperledger Caliper** (comprehensive phase) |
 
 ## Documentation map

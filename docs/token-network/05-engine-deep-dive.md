@@ -16,7 +16,7 @@ REST API.
 |---|---|---|
 | `issuer` | 9100 | mint / burn (central bank) |
 | `auditor` | 9000 | approve + open every transaction (central bank) |
-| `owner` | 9200 / 9300 | bank wallets (owner1 = banka, owner2 = bankb) |
+| `owner` | 9200+100(k−1) | one per bank `k` (owner{k} = bank{k}) |
 | `swagger-ui` | 8080 | API docs |
 
 Each node is a Fabric Smart Client node: it talks to the other nodes over
@@ -30,11 +30,11 @@ ZK proofs, gets the auditor's signature, and submits to the settlement channel.
    not build on current Go).
 2. **`go.work` → go 1.24.0** and **Dockerfiles → `golang:1.24`** (was
    `golang:latest`, which broke the build).
-3. **Wired to our 3-org network** — channel `settlement`; issuer/auditor on the
-   central-bank peer (`CentralBankMSP`), owner1 on banka (`BankAMSP`), owner2 on
-   bankb (`BankBMSP`).
-4. **Fixed a latent P2P resolver bug** — owner1's resolver now points at
-   owner2's real listen port (9301).
+3. **Wired to the settlement network** — channel `settlement`; issuer/auditor on
+   the central-bank peer (`CentralBankMSP`), and one owner per bank (`Bank{k}MSP`,
+   conf rendered from `core.yaml.tpl` on the bank's VM).
+4. **Fixed a latent P2P resolver bug** — each owner's resolver now points at the
+   other owners' real listen ports.
 5. **Confidentiality note** — the `data/` and `keys/` folders are generated and
    gitignored; the engine is reproducible via `scripts/`.
 

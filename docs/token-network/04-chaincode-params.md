@@ -19,6 +19,10 @@ tokenchaincode/zkatdlog_pp.json
 
 ## How it is generated (for our network)
 
+The params are **already generated and committed** at `tokenchaincode/zkatdlog_pp.json`
+— no regeneration is needed at deploy time. For reference, the command that
+produced them (using a demo owner wallet to pin the token CA's public key):
+
 ```bash
 tokengen gen dlog \
   --base 300 --exponent 5 \

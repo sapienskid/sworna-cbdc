@@ -6,7 +6,7 @@
 sequenceDiagram
     participant I as Issuer (CB)
     participant A as Auditor (CB)
-    participant O as Owner1 (banka)
+    participant O as Owner1 (bank1, demo "banka")
     participant CC as tokenchaincode (3 peers)
     I->>O: request recipient key for alice
     O-->>I: anonymous idemix key
@@ -24,9 +24,9 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant S as Owner1/bob (banka)
+    participant S as Owner1/bob (bank1)
     participant A as Auditor (CB)
-    participant R as Owner2/carlos (bankb)
+    participant R as Owner2/carlos (bank2)
     participant CC as tokenchaincode
     S->>R: request recipient key for carlos
     R-->>S: anonymous idemix key
@@ -47,7 +47,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant R as Owner2/carlos (bankb)
+    participant R as Owner2/carlos (bank2)
     participant A as Auditor (CB)
     participant CC as tokenchaincode
     R->>A: redeem commit(100 SWR) from carlos
