@@ -48,16 +48,14 @@ binaries_present() {
 
 download_and_extract() {
   local -r url="$1"
-  local -r tarball="$2"
-  local -r tmpfile
-  tmpfile=$(mktemp)
-  trap 'rm -f -- "$tmpfile"' RETURN
+  local -r tmpfile="$(mktemp)"
+  trap 'rm -f -- "${tmpfile:-}"' RETURN
   log_info "downloading $url"
   curl -fsSL --retry 5 --retry-delay 3 -o "$tmpfile" "$url" || {
     log_error "download failed: $url"
     return 1
   }
-  tar xzf "$tmpfile" -C "$ROOT" "$tarball"
+  tar xzf "$tmpfile" -C "$ROOT"
   rm -f -- "$tmpfile"
 }
 
@@ -68,13 +66,11 @@ install_binaries() {
 
   log_info "installing Fabric ${FABRIC_VERSION} binaries + config into bin/ config/"
   download_and_extract \
-    "https://github.com/hyperledger/fabric/releases/download/v${FABRIC_VERSION}/${fabric_tgz}" \
-    "bin config"
+    "https://github.com/hyperledger/fabric/releases/download/v${FABRIC_VERSION}/${fabric_tgz}"
 
   log_info "installing Fabric CA ${CA_VERSION} binaries into bin/"
   download_and_extract \
-    "https://github.com/hyperledger/fabric-ca/releases/download/v${CA_VERSION}/${ca_tgz}" \
-    "bin"
+    "https://github.com/hyperledger/fabric-ca/releases/download/v${CA_VERSION}/${ca_tgz}"
 }
 
 pull_images() {

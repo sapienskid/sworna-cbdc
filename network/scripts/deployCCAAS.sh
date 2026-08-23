@@ -141,37 +141,18 @@ startDockerContainer() {
                   -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:${CCAAS_SERVER_PORT} \
                   -e CHAINCODE_ID=$PACKAGE_ID -e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID \
                     ${CC_NAME}_ccaas_image:latest
-
-    ${CONTAINER_CLI} run  --rm -d --name peer0org2_${CC_NAME}_ccaas \
-                  --network fabric_test \
-                  -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:${CCAAS_SERVER_PORT} \
-                  -e CHAINCODE_ID=$PACKAGE_ID -e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID \
-                    ${CC_NAME}_ccaas_image:latest
-
-    ${CONTAINER_CLI} run  --rm -d --name peer0org3_${CC_NAME}_ccaas \
-                  --network fabric_test \
-                  -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:${CCAAS_SERVER_PORT} \
-                  -e CHAINCODE_ID=$PACKAGE_ID -e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID \
-                    ${CC_NAME}_ccaas_image:latest
     res=$?
     { set +x; } 2>/dev/null
     cat log.txt
     verifyResult $res "Failed to start the container container '${CC_NAME}_ccaas_image:latest' "
     successln "Docker container started succesfully '${CC_NAME}_ccaas_image:latest'" 
   else
-  
-    infoln "Not starting docker containers; these are the commands we would have run"
+    infoln "Not starting docker containers; this is the command we would have run"
     infoln "    ${CONTAINER_CLI} run --rm -d --name peer0org1_${CC_NAME}_ccaas  \
                   --network fabric_test \
                   -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:${CCAAS_SERVER_PORT} \
                   -e CHAINCODE_ID=$PACKAGE_ID -e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID \
                     ${CC_NAME}_ccaas_image:latest"
-    infoln "    ${CONTAINER_CLI} run --rm -d --name peer0org2_${CC_NAME}_ccaas  \
-                  --network fabric_test \
-                  -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:${CCAAS_SERVER_PORT} \
-                  -e CHAINCODE_ID=$PACKAGE_ID -e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID \
-                    ${CC_NAME}_ccaas_image:latest"
-
   fi
 }
 
@@ -181,51 +162,26 @@ buildDockerImages
 ## package the chaincode
 packageChaincode
 
-## Install chaincode on all three orgs (centralbank, banka, bankb)
+## Install chaincode on the central-bank peer (org1)
 infoln "Installing chaincode on peer0.centralbank..."
 installChaincode 1
-infoln "Install chaincode on peer0.banka..."
-installChaincode 2
-infoln "Install chaincode on peer0.bankb..."
-installChaincode 3
 
 resolveSequence
 
 ## query whether the chaincode is installed
 queryInstalled 1
 
-## approve the definition for centralbank
+## approve the definition for the central-bank org
 approveForMyOrg 1
 
-## approve the definition for banka
-approveForMyOrg 2
-
-## approve the definition for bankb
-approveForMyOrg 3
-
 ## check whether the chaincode definition is ready to be committed
-## expect all three orgs to have approved
-checkCommitReadiness 1 "\"CentralBankMSP\": true" "\"BankAMSP\": true" "\"BankBMSP\": true"
-checkCommitReadiness 2 "\"CentralBankMSP\": true" "\"BankAMSP\": true" "\"BankBMSP\": true"
-checkCommitReadiness 3 "\"CentralBankMSP\": true" "\"BankAMSP\": true" "\"BankBMSP\": true"
+checkCommitReadiness 1 "\"CentralBankMSP\": true"
 
-## now that we know all three orgs have approved, commit the definition
-commitChaincodeDefinition 1 2 3
-
-## query on all three orgs to see that the definition committed successfully
-queryCommitted 1
-queryCommitted 2
-queryCommitted 3
+## NOTE: the definition is NOT committed here. Banks onboard after this
+## (scripts/onboard-bank.sh); once they are on the channel, commit with
+## ./scripts/commit-chaincode.sh
 
 # start the container
 startDockerContainer
-
-## Invoke the chaincode - this does require that the chaincode have the 'initLedger'
-## method defined
-if [ "$CC_INIT_FCN" = "NA" ]; then
-  infoln "Chaincode initialization is not required"
-else
-  chaincodeInvokeInit 1 2 3
-fi
 
 exit 0
