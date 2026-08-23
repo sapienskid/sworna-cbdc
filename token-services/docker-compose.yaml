@@ -1,9 +1,7 @@
 # Central-bank token services (issuer + auditor + API docs).
 #
-# The commercial-bank owner nodes (owner1/owner2) are NOT part of the CB host;
-# each bank runs its own owner service from docker-compose.bank.yaml on its own
-# VM. For an all-in-one dev host, additionally run:
-#   docker compose -f docker-compose.bank.yaml up -d --build owner1 owner2
+# The commercial-bank owner nodes are NOT part of the CB host; each bank runs
+# its own owner service from docker-compose.bank.yaml on its own VM.
 networks:
   test:
     name: fabric_test

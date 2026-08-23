@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from .config import settings
+from .owner_urls import owner_base_url
 
 
 class TokenServiceError(RuntimeError):
@@ -65,7 +66,7 @@ class TokenClient:
         message: str,
     ) -> str:
         resp = await self._client.post(
-            f"{settings.owner_nodes[from_node]}/owner/accounts/{from_wallet}/transfer",
+            f"{owner_base_url(from_node)}/owner/accounts/{from_wallet}/transfer",
             json={
                 "amount": {"code": "SWR", "value": amount_minor},
                 "counterparty": {"node": to_node, "account": to_wallet},
@@ -79,7 +80,7 @@ class TokenClient:
 
     async def redeem(self, wallet: str, node: str, amount_minor: int, message: str) -> str:
         resp = await self._client.post(
-            f"{settings.owner_nodes[node]}/owner/accounts/{wallet}/redeem",
+            f"{owner_base_url(node)}/owner/accounts/{wallet}/redeem",
             json={"amount": {"code": "SWR", "value": amount_minor}, "message": message},
         )
         payload = resp.json()
@@ -89,7 +90,7 @@ class TokenClient:
 
     async def balances(self, wallet: str, node: str) -> int:
         resp = await self._client.get(
-            f"{settings.owner_nodes[node]}/owner/accounts/{wallet}"
+            f"{owner_base_url(node)}/owner/accounts/{wallet}"
         )
         payload = resp.json()
         if resp.status_code != 200:

@@ -70,6 +70,13 @@ config/
 # Per-portal production builds (generated)
 dist-*/
 
+# Generated at deploy time (scripts/gen-net-overrides.py, bank-network.sh)
+token-services/docker-compose.net.yaml
+token-services/docker-compose.bank.net.yaml
+network/configtx-bank/
+network/bank*-org.json
+network/configtx-bank/
+
 # Portal env files are committed config
 !.env.portal-*
 

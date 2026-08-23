@@ -1,3 +1,7 @@
+# Owner FSC node configuration — TEMPLATE.
+# Rendered per bank by scripts/render-owner-conf.py into
+# token-services/owner/conf/<owner_node>/core.yaml (see scripts/bank-network.sh).
+# Scalar placeholders: @@OWNER_NODE@@ @@OWNER_P2P@@ @@BANK_ORG@@ @@BANK_MSP@@ @@PEER_PORT@@
 logging:
   spec: info
   format: '%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}'
@@ -7,13 +11,13 @@ logging:
 fsc:
   identity:
     cert:
-      file: /var/fsc/keys/owner2/fsc/msp/signcerts/cert.pem
+      file: /var/fsc/keys/@@OWNER_NODE@@/fsc/msp/signcerts/cert.pem
     key:
-      file: /var/fsc/keys/owner2/fsc/msp/keystore/priv_sk
+      file: /var/fsc/keys/@@OWNER_NODE@@/fsc/msp/keystore/priv_sk
   tls:
     enabled: false # TODO
   p2p:
-    listenAddress: /ip4/0.0.0.0/tcp/9301
+    listenAddress: /ip4/0.0.0.0/tcp/@@OWNER_P2P@@
     # If empty, this is a P2P boostrap node. Otherwise, it contains the name of the FSC node that is a bootstrap node.
     # The name of the FSC node that is a bootstrap node must be set under fsc.endpoint.resolvers
     bootstrapNode: auditor
@@ -21,7 +25,7 @@ fsc:
     persistence:
       type: badger # badger or memory
       opts:
-        path: /var/fsc/data/owner2/kvs
+        path: /var/fsc/data/@@OWNER_NODE@@/kvs
 
   # The endpoint section tells how to reach other FSC node in the network.
   # For each node, the name, the domain, the identity of the node, and its addresses must be specified.
@@ -39,27 +43,20 @@ fsc:
           path: /var/fsc/keys/issuer/fsc/msp/signcerts/cert.pem
         addresses:
           P2P: issuer.sworna.example.com:9101
-      - name: owner1
-        identity:
-          id: owner1
-          path: /var/fsc/keys/owner1/fsc/msp/signcerts/cert.pem
-        addresses:
-          P2P: owner1.sworna.example.com:9201
-        aliases:
-          - owner1
+@@OWNER_RESOLVERS@@
 
 # ------------------- Fabric Configuration -------------------------
 fabric: 
   enabled: true
   mynetwork:
     default: true
-    mspConfigPath: /var/fsc/fabric/organizations/peerOrganizations/bankb.sworna.example.com/users/User1@bankb.sworna.example.com/msp
-    defaultMSP: BankBMSP
+    mspConfigPath: /var/fsc/fabric/organizations/peerOrganizations/@@BANK_ORG@@.sworna.example.com/users/User1@@BANK_ORG@@.sworna.example.com/msp
+    defaultMSP: @@BANK_MSP@@
     msps:
-      - id: BankBMSP
+      - id: @@BANK_MSP@@
         mspType: bccsp
-        mspID: BankBMSP
-        path: /var/fsc/fabric/organizations/peerOrganizations/bankb.sworna.example.com/users/User1@bankb.sworna.example.com/msp
+        mspID: @@BANK_MSP@@
+        path: /var/fsc/fabric/organizations/peerOrganizations/@@BANK_ORG@@.sworna.example.com/users/User1@@BANK_ORG@@.sworna.example.com/msp
     tls:
       enabled: true
     # If the keepalive values are too low, Fabric peers will complain with: ENHANCE_YOUR_CALM, debug data: "too_many_pings"
@@ -75,11 +72,11 @@ fabric:
         serverNameOverride: orderer.sworna.example.com
     # List of trusted peers this node can connect to. There must be at least one trusted peer. Others are discovered.
     peers:
-      - address: peer0.bankb.sworna.example.com:11051
+      - address: peer0.@@BANK_ORG@@.sworna.example.com:@@PEER_PORT@@
         connectionTimeout: 10s
         tlsEnabled: true
-        tlsRootCertFile: /var/fsc/fabric/organizations/peerOrganizations/bankb.sworna.example.com/peers/peer0.bankb.sworna.example.com/tls/ca.crt
-        serverNameOverride: peer0.bankb.sworna.example.com
+        tlsRootCertFile: /var/fsc/fabric/organizations/peerOrganizations/@@BANK_ORG@@.sworna.example.com/peers/peer0.@@BANK_ORG@@.sworna.example.com/tls/ca.crt
+        serverNameOverride: peer0.@@BANK_ORG@@.sworna.example.com
     # Channel where the token chaincode is deployed
     channels:
       - name: settlement
@@ -89,7 +86,7 @@ fabric:
       persistence:
         type: badger
         opts:
-          path: /var/fsc/data/owner2/vault
+          path: /var/fsc/data/@@OWNER_NODE@@/vault
 
 # ------------------- Token SDK Configuration -------------------------
 token:
@@ -103,32 +100,7 @@ token:
       wallets:
         defaultCacheSize: 3 # how many idemix keys to pre-generate
         owners:
-          - id: carlos # the unique identifier of this wallet. Here is an example of use: `ttx.GetWallet(context, "alice")` 
-            # default: true # is this the default owner wallet
-            path: /var/fsc/keys/owner2/wallet/carlos/msp
-          - id: dan
-            path: /var/fsc/keys/owner2/wallet/dan/msp
-
-          - id: pool_b2_w1
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w1/msp
-          - id: pool_b2_w2
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w2/msp
-          - id: pool_b2_w3
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w3/msp
-          - id: pool_b2_w4
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w4/msp
-          - id: pool_b2_w5
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w5/msp
-          - id: pool_b2_w6
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w6/msp
-          - id: pool_b2_w7
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w7/msp
-          - id: pool_b2_w8
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w8/msp
-          - id: pool_b2_w9
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w9/msp
-          - id: pool_b2_w10
-            path: /var/fsc/keys/owner2/wallet/pool_b2_w10/msp
+@@WALLETS@@
 
   # Internal database to keep track of token transactions. 
   # It is used by auditors and token owners to track history
@@ -137,4 +109,4 @@ token:
       # type can be badger (disk) or memory
       type: badger
       opts:
-        path: /var/fsc/data/owner2/txdb
+        path: /var/fsc/data/@@OWNER_NODE@@/txdb

@@ -1,55 +1,42 @@
-# Bank-owner token services.
+# Bank-owner token service — ONE parameterized `owner` service.
 #
-# Used by the commercial-bank VMs (and optionally for an all-in-one dev host).
-# Each bank runs only ITS owner node: Bank A VM -> `owner1`, Bank B VM -> `owner2`.
+# Each commercial bank VM runs its OWN owner FSC node via this file. The
+# per-bank values come from the environment (set by scripts/deploy-bank.sh):
+#   OWNER_NODE     owner{k}
+#   OWNER_HOSTNAME owner{k}               (FSC hostname owner{k}.sworna.example.com)
+#   OWNER_REST_PORT 9200+100(k-1)         (host port -> container :9000)
+#   OWNER_P2P_PORT   9201+100(k-1)        (exposed FSC P2P port)
+#
 # Run from token-services/:
+#   docker compose -f docker-compose.bank.yaml \
+#       [-f docker-compose.bank.net.yaml] \
+#       up -d --build owner
 #
-#   docker compose -f docker-compose.bank.yaml up -d --build owner1   # Bank A host
-#   docker compose -f docker-compose.bank.yaml up -d --build owner2   # Bank B host
-#   docker compose -f docker-compose.bank.yaml up -d --build owner1 owner2  # all-in-one dev
-#
-# The owner nodes join the same external fabric_test network as the CB services
-# (auditor/issuer in docker-compose.yaml), so FSC hostnames resolve across hosts
-# that are all on the same docker network. Across real VMs you must publish the
-# P2P ports and add DNS/extra_hosts (docs/token-network/09-distributed-deployment.md).
+# The owner conf (owner/conf/<OWNER_NODE>/core.yaml) is rendered by
+# scripts/bank-network.sh from the template. The owner joins the external
+# fabric_test network; across real VMs the cross-host DNS comes from the
+# generated docker-compose.bank.net.yaml (extra_hosts) — see
+# docs/token-network/09-distributed-deployment.md.
 networks:
   test:
     name: fabric_test
     external: true
 
 services:
-  owner1:
-    hostname: owner1.sworna.example.com
+  owner:
+    hostname: ${OWNER_HOSTNAME:?OWNER_HOSTNAME (e.g. owner1) must be set}.sworna.example.com
     restart: always
     build:
       context: ./owner
       dockerfile: ../Dockerfile
     volumes:
-      - ./data/owner1:/var/fsc/data/owner1
-      - ./owner/conf/owner1:/conf:ro
+      - ./data/${OWNER_NODE:?OWNER_NODE (e.g. owner1) must be set}:/var/fsc/data/${OWNER_NODE}
+      - ./owner/conf/${OWNER_NODE}:/conf:ro
       - ./keys:/var/fsc/keys:ro
       - ../network/organizations:/var/fsc/fabric/organizations:ro
     ports:
-      - 9200:9000
+      - "${OWNER_REST_PORT:?OWNER_REST_PORT must be set}:9000"
     expose:
-      - 9201
-    networks:
-      - test
-
-  owner2:
-    hostname: owner2.sworna.example.com
-    restart: always
-    build:
-      context: ./owner
-      dockerfile: ../Dockerfile
-    volumes:
-      - ./data/owner2:/var/fsc/data/owner2
-      - ./owner/conf/owner2:/conf:ro
-      - ./keys:/var/fsc/keys:ro
-      - ../network/organizations:/var/fsc/fabric/organizations:ro
-    ports:
-      - 9300:9000
-    expose:
-      - 9301
+      - "${OWNER_P2P_PORT:?OWNER_P2P_PORT must be set}"
     networks:
       - test

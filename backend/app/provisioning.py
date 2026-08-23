@@ -14,14 +14,11 @@ import secrets
 import subprocess
 from pathlib import Path
 
-import yaml
-
 from .models import Bank
 from .paths import BIN, TOKEN_SERVICES
 
 TOKEN_CA_URL = os.getenv("SWORNA_TOKEN_CA", "http://localhost:27054")
 TOKEN_CA_ADMIN = os.getenv("SWORNA_TOKEN_CA_ADMIN", "admin:adminpw")
-OWNER_CONF_DIR = Path(TOKEN_SERVICES) / "owner" / "conf"
 KEYS_DIR = Path(TOKEN_SERVICES) / "keys"
 CA_CLIENT_HOME = Path(
     os.getenv("SWORNA_CA_CLIENT_HOME", str(Path(TOKEN_SERVICES) / ".ca-client"))
@@ -57,20 +54,13 @@ def ensure_ca_admin() -> None:
     _run("fabric-ca-client", "enroll", "-u", f"http://{TOKEN_CA_ADMIN}@{TOKEN_CA_URL.removeprefix('http://')}")
 
 
-def owner_conf_path(owner_node: str) -> Path:
-    return OWNER_CONF_DIR / owner_node / "core.yaml"
+def pool_wallet_ids(bank: Bank) -> list[str]:
+    """Deterministic pool wallet ids for a bank: pool_{code}_w1..w{pool_size}.
 
-
-def declared_pool_wallets(owner_node: str) -> list[str]:
-    """Pool wallet ids declared in the owner conf (id.startswith('pool_w'))."""
-    path = owner_conf_path(owner_node)
-    if not path.exists():
-        raise ProvisioningError(f"owner conf not found: {path}")
-    conf = yaml.safe_load(path.read_text())
-    owners = (
-        conf.get("token", {}).get("tms", {}).get("mytms", {}).get("wallets", {}).get("owners", [])
-    )
-    return [o["id"] for o in owners if o.get("id", "").startswith("pool_")]
+    The bank's owner conf (rendered from the template on its VM) declares the
+    same ids, so the CB does not need the conf file to provision any bank.
+    """
+    return [f"pool_{bank.code}_w{i}" for i in range(1, bank.pool_size + 1)]
 
 
 def wallet_msp_path(owner_node: str, wallet_id: str) -> Path:
@@ -97,11 +87,11 @@ def generate_wallet(owner_node: str, wallet_id: str) -> Path:
 
 
 def provision_wallet_pool(bank: Bank) -> None:
-    """Generate missing idemix key material for the bank's declared pool wallets."""
-    declared = declared_pool_wallets(bank.owner_node)
+    """Generate missing idemix key material for the bank's pool wallets."""
+    declared = pool_wallet_ids(bank)
     if not declared:
         raise ProvisioningError(
-            f"no pool wallets declared in {bank.owner_node} conf"
+            f"bank {bank.name} has an empty wallet pool"
         )
 
     used = set(bank.wallet_pool.get("used", []))

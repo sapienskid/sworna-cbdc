@@ -18,7 +18,7 @@ BANKS = [
     {
         "code": "001",
         "name": "banka",
-        "msp_id": "BankAMSP",
+        "msp_id": "Bank1MSP",
         "owner_node": "owner1",
         "staff": "banka_admin",
         "accounts": [
@@ -29,7 +29,7 @@ BANKS = [
     {
         "code": "002",
         "name": "bankb",
-        "msp_id": "BankBMSP",
+        "msp_id": "Bank2MSP",
         "owner_node": "owner2",
         "staff": "bankb_admin",
         "accounts": [
