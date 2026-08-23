@@ -6,6 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -152,8 +153,8 @@ async def overview(user: User = Depends(cb_admin), session: Session = Depends(ge
                 bank_minor += await token_client.balances(
                     wallet=account.wallet, node=bank.owner_node
                 )
-            except TokenServiceError:
-                continue
+            except (TokenServiceError, httpx.HTTPError):
+                continue  # owner VM unreachable — report what we can
         total_minor += bank_minor
         rows.append(
             CirculationRow(

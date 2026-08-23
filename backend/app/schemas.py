@@ -27,6 +27,10 @@ class BankCreate(BaseModel):
     msp_id: str
     owner_node: str
     portal_url: str = ""
+    staff_username: str = Field(
+        default="",
+        description="login for the bank's staff console; created if provided",
+    )
     pool_size: int = Field(default=10, ge=1, le=100)
     permissions: BankPermissions = BankPermissions()
 

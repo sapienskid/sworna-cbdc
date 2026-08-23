@@ -59,6 +59,19 @@ def create_bank(
         wallet_pool={"used": [], "free": []},
     )
     session.add(bank)
+
+    if body.staff_username:
+        if session.scalar(select(User).where(User.username == body.staff_username)):
+            raise HTTPException(409, f"username '{body.staff_username}' already in use")
+        session.add(
+            User(
+                username=body.staff_username,
+                password_hash=hash_password("sworna-bank"),
+                role="bank_staff",
+                bank_code=bank.code,
+            )
+        )
+
     session.commit()
     session.refresh(bank)
     return bank

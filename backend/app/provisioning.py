@@ -1,16 +1,18 @@
-"""Bank provisioning: create a bank's wallet key material via the token CA.
+"""Bank provisioning: mint a bank's token identities via the token CA.
 
-The owner-node confs already declare a fixed set of pool wallets
-(`pool_w1..pool_wN`, committed in the repo). The central bank controls the
-token CA (the idemix issuer trusted by the chaincode params), so provisioning
-only has to *generate* the idemix key material for those declared wallets and
-record the pool manifest on the bank. Onboarding then assigns wallets to new
-customer accounts.
+The central bank controls the token CA (the idemix issuer trusted by the
+chaincode params), so provisioning generates, per bank:
+  - the owner node's FSC identity (`fsc owner{k}`) — the node's own credential;
+  - the pool wallet keys (`pool_{code}_w1..wN`) — assigned to customers at
+    onboarding.
+
+Banks are created at runtime (`POST /api/v1/banks`); nothing is pre-seeded.
 """
 from __future__ import annotations
 
 import os
 import secrets
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -54,6 +56,42 @@ def ensure_ca_admin() -> None:
     _run("fabric-ca-client", "enroll", "-u", f"http://{TOKEN_CA_ADMIN}@{TOKEN_CA_URL.removeprefix('http://')}")
 
 
+def owner_fsc_msp_path(owner_node: str) -> Path:
+    return KEYS_DIR / owner_node / "fsc" / "msp"
+
+
+def ensure_owner_identity(bank: Bank) -> bool:
+    """Enroll the bank's FSC node identity (`fsc owner{k}`) if missing.
+
+    The owner conf references this identity (its P2P credential), so it must
+    exist before the bank's bundle is exported. Returns True if enrolled now.
+    """
+    msp = owner_fsc_msp_path(bank.owner_node)
+    if (msp / "signcerts" / "cert.pem").exists():
+        return False
+
+    ensure_ca_admin()
+    keystore = msp / "keystore"
+    keystore.mkdir(parents=True, exist_ok=True)
+    secret = secrets.token_urlsafe(12)
+    _run(
+        "fabric-ca-client", "register", "-u", TOKEN_CA_URL,
+        "--id.name", f"fsc{bank.owner_node}", "--id.secret", secret,
+        "--id.type", "client",
+    )
+    _run(
+        "fabric-ca-client", "enroll", "-u",
+        f"http://fsc{bank.owner_node}:{secret}@{TOKEN_CA_URL.removeprefix('http://')}",
+        "-M", str(msp),
+    )
+    # the owner conf references the key under a fixed name
+    for f in keystore.iterdir():
+        if f.name != "priv_sk":
+            shutil.move(str(f), str(keystore / "priv_sk"))
+            break
+    return True
+
+
 def pool_wallet_ids(bank: Bank) -> list[str]:
     """Deterministic pool wallet ids for a bank: pool_{code}_w1..w{pool_size}.
 
@@ -87,22 +125,21 @@ def generate_wallet(owner_node: str, wallet_id: str) -> Path:
 
 
 def provision_wallet_pool(bank: Bank) -> None:
-    """Generate missing idemix key material for the bank's pool wallets."""
+    """Mint everything a new bank needs from the token CA: its FSC identity
+    plus the pool wallet keys."""
     declared = pool_wallet_ids(bank)
     if not declared:
-        raise ProvisioningError(
-            f"bank {bank.name} has an empty wallet pool"
-        )
+        raise ProvisioningError(f"bank {bank.name} has an empty wallet pool")
+
+    ensure_owner_identity(bank)
 
     used = set(bank.wallet_pool.get("used", []))
     free = [w for w in declared if w not in used]
 
-    generated = 0
     for wid in free:
         msp = wallet_msp_path(bank.owner_node, wid)
         if not (msp / "user" / "SignerConfig").exists():
             generate_wallet(bank.owner_node, wid)
-            generated += 1
 
     bank.wallet_pool = {"used": sorted(used), "free": free}
     bank.pool_size = len(declared)
