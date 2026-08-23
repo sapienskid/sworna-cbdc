@@ -1,45 +1,47 @@
 #!/usr/bin/env bash
 #
-# Package each bank's "join bundle" so it can be scp'd to the bank's VM.
+# Export a join bundle per registered bank to dist-bank-bundles/.
 #
-# A bank bundle contains everything a bank host needs that is NOT in the git
-# repo (all gitignored, generated on the CB host):
-#   - token-services/keys/<owner>          the idemix wallets the CB provisioned
-#   - network/organizations/peerOrganizations/<org>   peer + admin crypto
-#   - network/organizations/ordererOrganizations      orderer TLS CA (to reach CB)
-#   - network/organizations/fabric-ca/<org>           the org's Fabric CA data
-#   - network/channel-artifacts/settlement.block      genesis block to join
+# Each bundle now contains ONLY what the bank cannot generate itself and what
+# is not secret to the CB network:
+#   - token-services/keys/<owner_node>     idemix wallets (minted by the CB's
+#                                          token CA: the bank's fsc identity,
+#                                          demo wallets and pool wallets)
+#   - orderer TLS CA cert + tlsca cert      public certs needed to reach the
+#                                          CB-hosted orderer
 #
-# Output: dist-bank-bundles/banka.tar.gz and bankb.tar.gz
+# NO bank Fabric keys, NO CA data, NO genesis block — the bank generates its
+# own org identity on its own VM and fetches the genesis block from the orderer.
+#
+# Requires the backend to be up (it reads the bank registry).
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 OUT="$ROOT/dist-bank-bundles"
 mkdir -p "$OUT"
 
-pack() {
-  local bank="$1"; shift
-  local tarfile="$OUT/${bank}.tar.gz"
-  log_info "packing $bank bundle -> $tarfile"
-  tar -czf "$tarfile" -C "$ROOT" "$@"
-}
-
 log_info() { printf '[%s] INFO: %s\n' "$(date +'%H:%M:%S')" "$*"; }
 
-pack banka \
-  token-services/keys/owner1 \
-  network/organizations/peerOrganizations/banka.sworna.example.com \
-  network/organizations/ordererOrganizations/sworna.example.com \
-  network/organizations/fabric-ca/org2 \
-  network/channel-artifacts/settlement.block
+BACKEND="${SWORNA_BACKEND:-http://localhost:8000/api/v1}"
+TOKEN=$(curl -sf -X POST "$BACKEND/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"cbadmin","password":"sworna-cb"}' | jq -r .token)
+BANKS=$(curl -sf "$BACKEND/banks" -H "Authorization: Bearer $TOKEN")
 
-pack bankb \
-  token-services/keys/owner2 \
-  network/organizations/peerOrganizations/bankb.sworna.example.com \
-  network/organizations/ordererOrganizations/sworna.example.com \
-  network/addOrg3/fabric-ca/org3 \
-  network/channel-artifacts/settlement.block
+if [ "$(echo "$BANKS" | jq 'length')" -eq 0 ]; then
+  log_info "no banks registered yet — nothing to export"
+  exit 0
+fi
 
-log_info "bundles ready in $OUT — copy each tarball to its bank VM and extract under the repo root."
-log_info "  scp $OUT/banka.tar.gz sapiens@<BANKA-IP>:~/CBDC/  &&  (cd ~/CBDC && tar xzf banka.tar.gz)"
-log_info "  scp $OUT/bankb.tar.gz sapiens@<BANKB-IP>:~/CBDC/  &&  (cd ~/CBDC && tar xzf bankb.tar.gz)"
+for row in $(echo "$BANKS" | jq -r '.[] | @base64'); do
+  code=$(echo "$row" | base64 -d | jq -r .code)
+  owner=$(echo "$row" | base64 -d | jq -r .owner_node)
+  tarfile="$OUT/bank${code}.tar.gz"
+  log_info "packing bank $code ($owner) -> $tarfile"
+  tar -czf "$tarfile" -C "$ROOT" \
+    "token-services/keys/$owner" \
+    network/organizations/ordererOrganizations/sworna.example.com/orderers/orderer.sworna.example.com/tls/ca.crt \
+    network/organizations/ordererOrganizations/sworna.example.com/tlsca/tlsca.sworna.example.com-cert.pem
+done
+
+log_info "bundles ready in $OUT — copy each to its bank VM and extract under the repo root."
+log_info "  scp $OUT/bank<CODE>.tar.gz sapiens@<BANK-IP>:~/CBDC/  &&  (cd ~/CBDC && tar xzf bank<CODE>.tar.gz)"

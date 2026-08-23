@@ -2,7 +2,12 @@
 
 **Sworna** is a prototype Central Bank Digital Currency (CBDC) system built on **Hyperledger Fabric**, modeling a two-tier retail + wholesale payment system for the **Nepali rupee** concept. The currency is represented on-ledger as **UTXO tokens protected by Zero-Knowledge Proofs** — amounts and parties remain hidden to the ledger while remaining provably valid, with a central-bank-operated **auditor** enforcing oversight.
 
-> **Project status: v2 — real banking system.** 3-org Fabric settlement, ZK-private SWR, and a banking layer: account numbers, per-bank portals, JWT auth, payments by account number (incl. cross-bank), CB provisioning (wallet-pool keys + permissions), and a shadcn/ui interface. Each bank runs its own peer/CA/owner on its own VM; the central-bank host is deployed on a Tailscale VM (`100.72.112.29`). **Setup for any host (CB or bank): [docs/SETUP.md](docs/SETUP.md).** See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [docs/token-network/](docs/token-network/).
+> **Project status: v3 — distributed N-bank.** ZK-private SWR on a 3+ org Fabric
+> settlement network with a banking layer (accounts, per-bank portals, JWT,
+> payments by account number incl. cross-bank, CB provisioning). The CB host and
+> every commercial bank run on their **own VMs**; each bank self-provisions its
+> Fabric org and any number of banks are supported. **Setup: [docs/SETUP.md](docs/SETUP.md).**
+> See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [docs/token-network/](docs/token-network/).
 
 ---
 
@@ -77,41 +82,32 @@ Recommendation: **Option 1** for the Phase-3 demo.
 
 ## Phase 3 — running the stack
 
-Everything is owned in this repo. **Distributed bring-up (3 VMs):**
+Everything is owned in this repo. **Deployment (CB + N bank VMs):**
 
 ```bash
 # CB VM
 ./scripts/install-fabric-tools.sh                     # one-time: binaries + images
-./scripts/deploy-centralbank.sh --provision --distributed
-#   -> network + chaincode + engine + portal; bank peers/CAs removed here;
-#      join bundles exported to dist-bank-bundles/
+./scripts/deploy-centralbank.sh --provision
+#   -> org1 network + chaincode approved + engine + portal
+#   -> dist-bank-bundles/bank<CODE>.tar.gz per bank
 
-# copy banka.tar.gz / bankb.tar.gz to each bank VM and extract under the repo root, then:
-# Bank A VM
-export SWORNA_CB_HOST=<CB-IP> SWORNA_BANKB_HOST=<BANK-B-IP>
-./scripts/deploy-banka.sh                             # peer+CA+chaincode+owner+portal
+# Bank k VM (after extracting its bundle):
+export SWORNA_CB_HOST=<CB-IP> SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ...
+./scripts/deploy-bank.sh 00k        # identity phase -> bank{k}-org.json
+
+# CB VM: add the bank to the channel, then re-run the bank script, then commit
+./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json
+./scripts/deploy-bank.sh 00k        # (bank VM) join + start owner/portal
+./scripts/commit-chaincode.sh       # (CB VM, once all banks are on)
 ```
 
-**Dev-laptop testing only (NOT a deployment):** on a single dev laptop, run
-`deploy-centralbank.sh --provision` (no `--distributed`), then start the owners
-locally and run the demo:
-
-```bash
-cd token-services && docker compose -f docker-compose.bank.yaml up -d --build owner1 owner2
-./scripts/demo.sh                                     # issue -> transfers -> redeem
-```
-
-The deployment is always **distributed** — the CB and every bank are separated
-onto their own hosts; all-in-one is for local dev testing only.
-
-Fresh clones are handled automatically: `token-services/keys/` is gitignored,
-so `deploy-centralbank.sh` enrolls the token identities once before starting
-the engine. The deploy scripts require Docker Compose v2, and all backend paths
-derive from the repo location (`backend/app/paths.py`). See
+Fresh clones are handled automatically: `token-services/keys/` is gitignored, so
+`deploy-centralbank.sh` enrolls the CB's identities once; banks **self-provision
+their Fabric org** on their own VM. Deploy scripts require Docker Compose v2;
+backend paths derive from the repo location (`backend/app/paths.py`). See
 [docs/SETUP.md](docs/SETUP.md) for the full runbook and per-role verification,
 and [docs/token-network/09-distributed-deployment.md](docs/token-network/09-distributed-deployment.md)
-for the distributed 3-VM topology (banks on their own hosts — implemented,
-pending live validation).
+for the distributed N-VM topology (implemented, pending live validation).
 
 See [docs/DEMO.md](docs/DEMO.md) for the runbook and [docs/token-network/](docs/token-network/) for how the token network works.
 

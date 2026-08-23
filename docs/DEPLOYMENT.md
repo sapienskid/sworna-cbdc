@@ -1,127 +1,105 @@
 # DEPLOYMENT — how Sworna is deployed
 
 One repository; a machine's role is decided by **which script it runs** and
-**which keys it holds**.
+**which keys it holds**. The deployment is **distributed**: the central bank and
+every commercial bank run on their own hosts, and any number of banks are
+supported.
 
 ```
 Central-bank host   orderer · peer0.centralbank · ca_org1 · ca_orderer · token CA · issuer/auditor · backend · CB portal
-Bank A host         ca_org2 · peer0.banka · chaincode · owner1 · bank portal
-Bank B host         ca_org3 · peer0.bankb · chaincode · owner2 · bank portal
+Bank k host         ca_bank{k} · peer0.bank{k} · chaincode · owner{k} · bank portal
 Customer machines   a browser only (the bank portal)
 ```
 
-> **Operational runbook:** [SETUP.md](SETUP.md) is the step-by-step, agent-runnable
-> guide for standing up any host (preflight → clone → Fabric tools → deploy →
-> verify). Read it before running the scripts below.
+> **Operational runbook:** [SETUP.md](SETUP.md) is the step-by-step,
+> agent-runnable guide. Read it before running the scripts below.
 
-## 1. The one repo, roles by script
+## 1. Roles by script
 
 | Script | Runs on | Starts |
 |---|---|---|
-| `scripts/deploy-centralbank.sh --provision --distributed` | CB host | network + chaincode + **identity enrollment** + issuer/auditor + backend + CB portal; then **removes the bank peers/CAs/chaincode** and exports the join bundles |
-| `scripts/deploy-banka.sh` | Bank A host | ca_org2 + peer0.banka + chaincode (joins `settlement`) + owner1 + bank A portal |
-| `scripts/deploy-bankb.sh` | Bank B host | ca_org3 + peer0.bankb + chaincode (joins `settlement`) + owner2 + bank B portal |
+| `scripts/deploy-centralbank.sh --provision` | CB host | org1 network + channel `settlement` + chaincode (approved, not committed) + identity enrollment + issuer/auditor + backend + portal + join bundles |
+| `scripts/onboard-bank.sh <MSP> <org-json>` | CB host | adds a bank's org to `settlement` (channel config update) |
+| `scripts/commit-chaincode.sh` | CB host | commits the chaincode with an OR endorsement policy over the CB + all banks |
+| `scripts/deploy-bank.sh <CODE>` | each bank host | the bank's own CA + peer + chaincode + owner + portal |
+| `scripts/bank-network.sh up\|identity\|join\|down` | each bank host | low-level bank peer bring-up, org enrollment, channel join |
+| `scripts/export-join-bundles.sh` | CB host | exports `dist-bank-bundles/bank<CODE>.tar.gz` (token wallets + orderer public certs) |
 
-Every host clones the same repo and installs the Fabric binaries/images into the
-repo's own `bin/`/`config/` (`./scripts/install-fabric-tools.sh`). Each bank is
-fully self-contained on its own VM: it receives a **join bundle** from the CB
-(`scripts/export-join-bundles.sh` → `dist-bank-bundles/<bank>.tar.gz`) containing
-the owner's idemix wallets, the org crypto (peer + admin + Fabric CA data), the
-orderer TLS CA and the channel genesis block.
+## 2. Trust model
 
-## 2. Provisioning (the CB is the trust anchor)
-
-The CB generates each bank's idemix wallets from its UI or API:
-
-```
-POST /api/v1/admin/banks/{code}/provision     # generate wallet pool keys
-PATCH /api/v1/banks/{code}/status             # registered -> active
-```
-
-The generated keys live under `token-services/keys/<owner_node>/` and are
-copied to the bank VM (the join bundle). The bank then starts its owner service.
-Provisioning is idempotent — re-run to top up a pool.
+- The **CB is the network founder**: it runs the orderer, creates `settlement`
+  with the central-bank org, and adds each bank's org via a channel config
+  update. It also runs the **token CA** (idemix issuer — all wallets come from
+  it), the **issuer** (mint/burn) and the **auditor** (approves + sees every
+  transaction).
+- Each **bank self-provisions its Fabric org** (peer + admin) against its **own
+  Fabric CA** on its own VM. Only its public CA cert is shared with the CB. The
+  CB never holds a bank's Fabric private keys, and a bank never holds another
+  org's keys.
+- The join bundle carries only the bank's **token wallets** (minted by the CB's
+  token CA) + public orderer TLS certs — never bank Fabric keys or orderer
+  private keys.
 
 ## 3. Fresh-clone gotchas (now handled)
 
-- `token-services/keys/` is **gitignored** — a fresh clone has no identities.
-  `deploy-centralbank.sh` now enrolls them automatically (runs
-  `token-services/scripts/enroll-users.sh` once, guarded) before the engine starts.
-- The deploy scripts require **Docker Compose v2** (`docker compose`).
-- Backend paths derive from the repo location (`backend/app/paths.py`) — no
-  hardcoded absolute paths, so any clone path works.
+- `token-services/keys/` and `network/organizations/` are gitignored — the CB
+  deploy enrolls identities automatically; banks self-provision their Fabric org.
+- Deploy scripts require **Docker Compose v2** (`docker compose`).
+- Backend paths derive from the repo location (`backend/app/paths.py`); owner
+  REST URLs derive from the owner node name (`app/owner_urls.py`) and resolve
+  on the CB host via `/etc/hosts`.
 
-## 4. Bring-up sequence
-
-**The deployment — distributed (3 VMs):**
+## 4. Deployment sequence
 
 ```bash
 # CB VM
-./scripts/deploy-centralbank.sh --provision --distributed    # network + chaincode + engine + portal; then:
-#   - removes the bank peers/CAs/chaincode from the CB host
-#   - exports dist-bank-bundles/banka.tar.gz + bankb.tar.gz
+./scripts/deploy-centralbank.sh --provision
+#   -> org1 network + chaincode approved + engine + portal
+#   -> dist-bank-bundles/bank<CODE>.tar.gz (one per registered bank)
 
-# copy the bundles to each bank VM, extract under the repo root, then:
-# Bank A VM
-export SWORNA_CB_HOST=<CB-IP> SWORNA_BANKB_HOST=<BANK-B-IP>
-./scripts/deploy-banka.sh
-# Bank B VM
-export SWORNA_CB_HOST=<CB-IP> SWORNA_BANKA_HOST=<BANK-A-IP>
-./scripts/deploy-bankb.sh
+# Bank k VM (after extracting its bundle)
+export SWORNA_CB_HOST=<CB-IP> SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ...
+./scripts/deploy-bank.sh 00k            # identity phase -> bank{k}-org.json
+
+# CB VM — add the bank to the channel
+./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json
+
+# Bank k VM — re-run to join + start
+./scripts/deploy-bank.sh 00k
+
+# CB VM — once, after all banks are on
+./scripts/commit-chaincode.sh
 ```
 
-**Dev-laptop testing only (NOT a deployment):** on a single dev laptop, run
-`./scripts/deploy-centralbank.sh --provision` (no `--distributed`) to keep
-everything local for testing, then run the owners locally:
-
-```bash
-cd token-services && docker compose -f docker-compose.bank.yaml up -d --build owner1 owner2
-./scripts/demo.sh                             # issue -> transfers -> redeem
-```
-
-The demo's cross-bank flows need owner1/owner2 running somewhere (bank VMs in a
-deployment, or locally for dev testing).
-
-## 5. Distributed networking
-
-Cross-host DNS is handled by compose `extra_hosts` derived from
-`SWORNA_CB_HOST` / sibling bank IPs; peers and owners connect **out** to the CB
-host. The full hostname map, the join-bundle contents and the validation
-checklist live in
-[docs/token-network/09-distributed-deployment.md](token-network/09-distributed-deployment.md)
-(**implemented, pending live validation**).
-
-## 6. Ports
+## 5. Ports
 
 | Port | Service | Host |
 |---|---|---|
 | 7050 · 7053 | orderer | CB |
 | 7051 | peer0.centralbank | CB |
-| 9051 / 11051 | peers (banka / bankb) | banka / bankb |
+| 9051+2000(k−1) | peer0.bank{k} | bank k |
 | 7054 · 9054 | ca_org1 · ca_orderer | CB |
-| 8054 / 9054 | ca_org2 / ca_org3 | banka / bankb |
+| 8054+1000(k−1) | ca_bank{k} | bank k |
 | 27054 | token CA | CB |
 | 9000 · 9100 | auditor / issuer | CB |
-| 9200 / 9300 | owner1 / owner2 | banka / bankb |
+| 9200+100(k−1) | owner{k} REST | bank k |
+| 9201+100(k−1) | owner{k} P2P | bank k |
 | 8000 | backend | CB |
 | 5173 | portals (web dev) | each host |
 
-Services bind `0.0.0.0`, so on lab VMs the portals/backend are reachable at
-`http://<tailnet-ip>:<port>` from any laptop on the tailnet.
+Services bind `0.0.0.0`, reachable at `http://<tailnet-ip>:<port>`.
 
-## 7. Progression
+## 6. Progression
 
-- **Dev (this repo, one laptop):** all-in-one is used **only for local testing**
-  on a dev laptop (run `deploy-centralbank.sh` without `--distributed`). It is
-  never a deployment — the CB and every bank are always separated onto their own
-  hosts.
-- **Lab demo (3 VMs):** the deployment — CB host + one VM per bank; each bank
-  runs its own peer/CA/owner. Cross-host DNS is
-  [09-distributed-deployment.md](token-network/09-distributed-deployment.md).
+- **Dev (this repo, one laptop):** all-in-one is **testing only**, never a
+  deployment — the CB and every bank are always separated onto their own hosts.
+- **Lab demo (N VMs):** the flow in §4; cross-host DNS via generated
+  `extra_hosts` + `/etc/hosts` — see
+  [docs/token-network/09-distributed-deployment.md](token-network/09-distributed-deployment.md).
 - **Comprehensive (up to 25 machines):** more orderers, CouchDB, monitoring,
   Ansible — Phase 4.
 
-## 8. References
+## 7. References
 
 - Runbook: [SETUP.md](SETUP.md)
 - Distributed validation: [docs/token-network/09-distributed-deployment.md](token-network/09-distributed-deployment.md)

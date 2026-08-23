@@ -1,104 +1,108 @@
-# Token network — distributed deployment (3 hosts)
+# Token network — distributed deployment (N hosts)
 
-> **Status: IMPLEMENTED — pending live validation.** The scripts, compose files
-> and join-bundle flow below are in the repo and pass static validation, but the
-> cross-host run (bank peers on their own VMs reaching the CB host) has not yet
-> been exercised on real VMs. Until the §4 checklist passes, the dev-laptop
-> all-in-one (testing only) remains the validated reference — see
-> [SETUP.md](../SETUP.md).
+> **Status: IMPLEMENTED — pending live validation.** Each bank self-provisions
+> its own Fabric org on its own VM; the CB host owns only the central-bank org.
+> The scripts below pass static validation; run §6 before the demo day.
 
-## 1. Host → role map
+## 1. Trust model (why it looks like this)
 
-Every bank is **fully self-contained** on its own VM (CA + peer + chaincode +
-owner + portal). The CB host keeps the orderer, the central-bank peer, the token
-CA, issuer/auditor, backend and CB portal.
+- The **CB host** is the network founder: it runs the orderer, creates the
+  `settlement` channel with the central-bank org, and **adds** each bank's org
+  via a channel config update. It also runs the token CA, issuer and auditor —
+  so the CB mints all wallets and sees every transaction.
+- Each **bank** runs its own Fabric CA and generates its own peer/admin
+  identity **on its own VM**; only its public CA cert is shared with the CB.
+  The bank never holds another org's keys, and the CB never holds the bank's
+  Fabric private keys.
+
+## 2. Host → role map (scales to N banks)
 
 | Host | Runs | Ports (host) |
 |---|---|---|
-| Central bank VM | orderer · peer0.centralbank · ca_org1 · ca_orderer · ca_token_network · issuer · auditor · swagger-ui · backend · CB portal | 7050/7053, 7051, 7054/9054, 27054, 9000, 9100, 8000, 5173 |
-| Bank A VM | ca_org2 · peer0.banka · token chaincode (peer0org2) · owner1 · bank portal | 8054, 9051, 9200, 5173 |
-| Bank B VM | ca_org3 · peer0.bankb · token chaincode (peer0org3) · owner2 · bank portal | 9054, 11051, 9300, 5173 |
+| Central bank VM | orderer · peer0.centralbank · ca_org1 · ca_orderer · ca_token_network · issuer · auditor · swagger-ui · backend · CB portal | 7050/7053, 7051, 7054, 9054, 27054, 9000, 9100, 8000, 5173 |
+| Bank `k` VM | ca_bank{k} · peer0.bank{k} · chaincode (peer0bank{k}) · owner{k} · bank portal | 8054+1000(k−1), 9051+2000(k−1), 9200+100(k−1), 5173 |
 
-## 2. Cross-host DNS (handled by compose `extra_hosts`)
+Naming (numeric, friendly display names live in the DB):
 
-Containers cannot use the host's `/etc/hosts`. Each host's compose files map the
-remote `*.sworna.example.com` names to the owning VM's Tailscale IP:
+| Bank index `k` | code | owner node | org | MSP | peer port | CA port | owner REST/P2P |
+|---|---|---|---|---|---|---|---|
+| 1 | 001 | owner1 | bank1.sworna.example.com | Bank1MSP | 9051 | 8054 | 9200 / 9201 |
+| 2 | 002 | owner2 | bank2.sworna.example.com | Bank2MSP | 11051 | 9054 | 9300 / 9301 |
+| 3 | 003 | owner3 | bank3.sworna.example.com | Bank3MSP | 13051 | 10054 | 9400 / 9401 |
+| … | … | … | … | … | … | … | … |
 
-- **Bank peer** (`network/compose/compose-bank-peer.yaml`): maps
-  `orderer.sworna.example.com` and `peer0.centralbank.sworna.example.com` to
-  `SWORNA_CB_HOST`.
-- **Bank owner** (`token-services/docker-compose.bank.net.yaml`): maps
-  orderer/auditor/issuer → `SWORNA_CB_HOST`, and the other bank's owner →
-  `SWORNA_OTHER_BANK_HOST`.
-- **CB issuer/auditor** (`token-services/docker-compose.net.yaml`): maps
-  owner1/owner2 → `SWORNA_BANKA_HOST` / `SWORNA_BANKB_HOST`.
+## 3. Cross-host DNS
 
-The peers/owners connect **out** to the CB host; no inbound firewall rules are
-needed on the CB beyond the published ports. The orderer does not dial peers.
+Containers cannot use the host's `/etc/hosts`. Compose `extra_hosts` files are
+**generated** per deploy (`scripts/gen-net-overrides.py`):
 
-## 3. Bring-up sequence
+- **Bank host:** the owner + peer containers resolve `orderer/auditor/issuer`
+  → `SWORNA_CB_HOST`, and every other `owner{j}` → `SWORNA_OWNER_<J>_HOST`.
+- **CB host:** the issuer/auditor containers resolve every `owner{k}` →
+  `SWORNA_OWNER_<K>_HOST`.
 
-### 3.1 CB host (distributed mode)
+Host-level `/etc/hosts` (for host-run CLI + the backend):
 
-```bash
-export SWORNA_BANKA_HOST=<bank-A-IP> SWORNA_BANKB_HOST=<bank-B-IP>   # optional, for cross-bank
-./scripts/deploy-centralbank.sh --provision --distributed
-```
+- **Every bank VM:** `orderer.sworna.example.com <CB-IP>` (the peer CLI needs it
+  for fetch/join/approve).
+- **CB host:** `owner{k}.sworna.example.com <bank-k-IP>` for every bank (the
+  FastAPI backend reaches the owner REST services through it).
+- **All hosts:** verify `localhost` resolves (a blank `/etc/hosts` breaks every
+  Fabric CA call).
 
-This brings up the full network (all 3 orgs + channel + chaincode committed),
-then **stops/removes the bank peers/CAs/chaincode from the CB host** and exports
-each bank's join bundle:
+## 4. Deployment sequence (the whole story)
 
-```bash
-ls dist-bank-bundles/        # banka.tar.gz, bankb.tar.gz
-```
+1. **CB VM:**
+   ```bash
+   ./scripts/deploy-centralbank.sh --provision
+   #   -> org1 network + channel `settlement` + chaincode installed/approved for the CB
+   #   -> token CA + issuer + auditor + backend + portal
+   #   -> per-bank join bundles in dist-bank-bundles/ (token wallets + orderer public certs)
+   ```
+2. **Bank `k` VM:** install the Fabric tools, extract its bundle, run:
+   ```bash
+   export SWORNA_CB_HOST=<CB-IP>
+   export SWORNA_OWNERS="owner1 owner2"              # all banks
+   export SWORNA_OWNER_OWNER1_HOST=<bank1-IP> SWORNA_OWNER_OWNER2_HOST=<bank2-IP> ...
+   ./scripts/deploy-bank.sh 00k
+   #   -> starts its own CA + peer, enrolls its org, renders the owner conf,
+   #      exports network/bank{k}-org.json, prints "send this to the CB"
+   ```
+3. **CB VM:** add the bank to the channel:
+   ```bash
+   ./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json
+   ```
+4. **Bank `k` VM:** re-run `./scripts/deploy-bank.sh 00k` — it joins the
+   channel, installs + approves the chaincode, runs its CCAAS container, starts
+   the owner service and the portal.
+5. **CB VM:** once all banks are on, commit the chaincode:
+   ```bash
+   ./scripts/commit-chaincode.sh        # OR policy over the CB + all banks
+   ```
 
-### 3.2 Copy join bundles to the bank VMs
+## 5. Join bundle (shrunk — no secrets leak)
 
-```bash
-scp dist-bank-bundles/banka.tar.gz sapiens@<BANK-A-IP>:~/CBDC/
-scp dist-bank-bundles/bankb.tar.gz sapiens@<BANK-B-IP>:~/CBDC/
-# on each bank VM, extract under the repo root:
-#   cd ~/CBDC && tar xzf banka.tar.gz
-```
+`scripts/export-join-bundles.sh` exports `dist-bank-bundles/bank<CODE>.tar.gz`
+containing ONLY:
+- `token-services/keys/<owner_node>` — the bank's token wallets (its fsc
+  identity + demo wallets + provisioned pool wallets), minted by the CB's token CA;
+- the **public** orderer TLS CA cert + tlsca cert.
 
-The bundle (see `scripts/export-join-bundles.sh`) contains everything a bank
-needs that isn't in git: the owner's idemix wallets, the org's peer/admin
-crypto, the orderer TLS CA, the org's Fabric CA data, and the channel genesis
-block.
+No bank Fabric keys, no CA data, no genesis block, no orderer private keys.
 
-### 3.3 Bank VMs
+## 6. Validation checklist
 
-```bash
-# Bank A
-export SWORNA_CB_HOST=<CB-IP> SWORNA_BANKB_HOST=<BANK-B-IP>
-./scripts/deploy-banka.sh
+- [ ] CB: `docker ps` shows orderer, `peer0.centralbank`, `ca_org1`, `ca_orderer`, token CA, issuer, auditor — and **no** bank containers
+- [ ] Bank `k`: `docker ps` shows `ca_bank{k}`, `peer0.bank{k}...`, `peer0bank{k}_tokenchaincode_ccaas`, `owner` healthy
+- [ ] `peer channel list` (Admin@bank{k}) shows `settlement`
+- [ ] Bank `k` owner: `curl http://<bank-k-IP>:<owner-rest>/api/v1/readyz` → ready
+- [ ] CB issues SWR to a Bank `k` customer → balance on the bank portal
+- [ ] Cross-bank transfer A → B commits and shows on both portals + the auditor
+- [ ] Redeem works
 
-# Bank B
-export SWORNA_CB_HOST=<CB-IP> SWORNA_BANKA_HOST=<BANK-A-IP>
-./scripts/deploy-bankb.sh
-```
+## 7. Related docs
 
-Each bank script: installs the bundle, starts CA + peer, joins `settlement`,
-installs the token chaincode package and runs its CCAAS container
-(`scripts/bank-network.sh up`), starts the owner service, and starts the portal.
-
-## 4. Validation checklist (run once, record the result)
-
-- [ ] Bank A VM: `docker ps` shows `ca_org2`, `peer0.banka.sworna.example.com`, `peer0org2_tokenchaincode_ccaas`, `owner1` healthy
-- [ ] Bank B VM: `docker ps` shows `ca_org3`, `peer0.bankb.sworna.example.com`, `peer0org3_tokenchaincode_ccaas`, `owner2` healthy
-- [ ] CB host: `docker ps` shows NO bank peer/CA/chaincode containers
-- [ ] Bank A: `peer channel list` (as Admin@banka) shows `settlement`
-- [ ] Bank A VM: `curl http://<BANK-A-IP>:9200/api/v1/readyz` → ready
-- [ ] CB issues SWR to a Bank A customer → balance appears on the bank portal
-- [ ] Cross-bank transfer A → B commits and shows on both portals + auditor
-- [ ] Redeem from Bank B works
-
-When this checklist passes, promote the status at the top of this file.
-
-## 5. Related docs
-
-- [SETUP.md](../SETUP.md) — the dev-laptop testing runbook (validated)
+- [SETUP.md](../SETUP.md) — the runbook (dev-laptop testing included)
 - [DEPLOYMENT.md](../DEPLOYMENT.md) — roles, ports, progression
 - [08-provisioning.md](08-provisioning.md) — wallet pools & the join bundle
 - [05-engine-deep-dive.md](05-engine-deep-dive.md) — the Go engine's hostnames

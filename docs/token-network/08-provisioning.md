@@ -14,9 +14,9 @@ wallets from a per-bank pool.
 ## Wallet pools
 
 Each bank's owner-node conf declares a fixed pool of wallets
-(`pool_w1..pool_w10` for owner1, `pool_b2_w1..` for owner2), committed in
-`token-services/owner/conf/<node>/core.yaml`. The **key material** for those
-wallets does not exist until the CB provisions the bank:
+(`pool_<code>_w1..w10`, e.g. `pool_001_w1` for bank 001), rendered on the bank's
+VM from the conf template. The **key material** for those wallets does not exist
+until the CB provisions the bank:
 
 ```
 POST /api/v1/admin/banks/{code}/provision   (cb_admin only)
@@ -43,10 +43,13 @@ Bank staff onboard customers (POST /accounts) -> assign_wallet() takes the next
 ## Joining the network (per VM)
 
 1. Each machine clones the repo and installs Fabric binaries/images.
-2. The CB VM brings up the network, deploys the chaincode, provisions banks.
-3. Each bank VM runs its role's deploy script (`deploy-banka.sh` /
-   `deploy-bankb.sh`), which starts its peer + CA + owner service + portal, using
-   the keys the CB generated.
+2. The CB VM brings up the org1 network, deploys (approves) the chaincode and
+   provisions banks.
+3. Each bank **self-provisions its own Fabric org** on its own VM
+   (`scripts/deploy-bank.sh <CODE>` → own CA + peer + org identity), then the CB
+   adds it to the channel (`scripts/onboard-bank.sh`) and the bank joins + starts
+   its owner service + portal. Its **token wallets** come from the CB's join
+   bundle (`dist-bank-bundles/`).
 
 ## Permissions (enforced in the backend)
 
