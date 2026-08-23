@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 #
-# Bring up (or tear down) a commercial bank's Fabric peer + CA on the bank's
-# OWN VM, join the `settlement` channel (which lives on the central-bank host),
-# and install the CCAAS token-chaincode container for this peer.
+# Bring up a commercial bank's Fabric peer + CA on the bank's OWN VM, enroll
+# the bank's org identity, and join the CB-hosted `settlement` channel.
 #
-# The channel + chaincode definition are already committed on the CB host, so a
-# bank only needs to: start CA + peer, join the channel, install the chaincode
-# package (same PACKAGE_ID the CB used) and run its chaincode container.
+# Subcommands:
+#   up        start this bank's own CA + peer containers
+#   identity  enroll the bank's org identities + render the owner conf +
+#             export the bank's public org MSP JSON (bank{k}-org.json)
+#   join      fetch the genesis block, join the channel, install the token
+#             chaincode package and run the bank's CCAAS container
+#             (run AFTER the CB runs scripts/onboard-bank.sh for this bank)
+#   down      stop the CA + peer (+ chaincode) containers
 #
-# Usage: ./scripts/bank-network.sh up|down
-# Env:   BANK_NUM=2|3     (2 = banka, 3 = bankb)  -- required
-#        SWORNA_CB_HOST   IP of the central-bank host -- required for `up`
+# Env:  BANK_CODE (001..) required; SWORNA_CB_HOST (CB host IP) for up/join.
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -26,67 +28,116 @@ CC_VERSION=1
 CC_SEQUENCE=1
 CCAAS_SERVER_PORT=9999
 
-case "${BANK_NUM:-}" in
-  2)
-    BANK_PROFILE=banka
-    BANK_ORG=banka; BANK_MSP=BankAMSP
-    BANK_PEER_PORT=9051; BANK_CC_PORT=9052; BANK_CA_PORT=8054
-    BANK_CA_NAME=ca-org2; BANK_CA_CONT=ca_org2
-    CCAAS_PEERNAME=peer0org2
-    ;;
-  3)
-    BANK_PROFILE=bankb
-    BANK_ORG=bankb; BANK_MSP=BankBMSP
-    BANK_PEER_PORT=11051; BANK_CC_PORT=11052; BANK_CA_PORT=9054
-    BANK_CA_NAME=ca-org3; BANK_CA_CONT=ca_org3
-    CCAAS_PEERNAME=peer0org3
-    ;;
-  *)
-    echo "ERROR: BANK_NUM must be 2 (banka) or 3 (bankb)" >&2
-    exit 1
-    ;;
-esac
+BANK_CODE="${BANK_CODE:?BANK_CODE (e.g. 001) must be set}"
+k=$((10#$BANK_CODE))                     # 1-based bank index
+OWNER_NODE="owner${k}"
+BANK_ORG="bank${k}"
+BANK_MSP="Bank${k}MSP"
+BANK_PEER_PORT=$((9051 + 2000 * (k - 1)))
+BANK_CC_PORT=$((BANK_PEER_PORT + 1))
+BANK_CA_PORT=$((8054 + 1000 * (k - 1)))
+BANK_CA_NAME="ca-bank${k}"
+BANK_CA_CONT="ca_bank${k}"
+BANK_CA_DATA="../organizations/fabric-ca/${BANK_ORG}"
+CCAAS_PEERNAME="peer0bank${k}"
+OWNER_REST_PORT=$((9200 + 100 * (k - 1)))
+OWNER_P2P_PORT=$((9201 + 100 * (k - 1)))
 
 log_info() { printf '[%s] INFO: %s\n' "$(date +'%H:%M:%S')" "$*"; }
 log_error() { printf '[%s] ERROR: %s\n' "$(date +'%H:%M:%S')" "$*" >&2; }
 
-org_dir="$NETWORK/organizations/peerOrganizations/${BANK_ORG}.sworna.example.com"
-orderer_dir="$NETWORK/organizations/ordererOrganizations/sworna.example.com"
-block_file="$NETWORK/channel-artifacts/${CHANNEL}.block"
+ORG_DIR="$NETWORK/organizations/peerOrganizations/${BANK_ORG}.sworna.example.com"
+ORDERER_CA="$NETWORK/organizations/ordererOrganizations/sworna.example.com/tlsca/tlsca.sworna.example.com-cert.pem"
+KEYS_DIR="$ROOT/token-services/keys"
+
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="$BANK_MSP"
+export CORE_PEER_MSPCONFIGPATH="$ORG_DIR/users/Admin@${BANK_ORG}.sworna.example.com/msp"
+export CORE_PEER_ADDRESS="localhost:${BANK_PEER_PORT}"
+export PEER_CA="$NETWORK/organizations/peerOrganizations/${BANK_ORG}.sworna.example.com/tlsca/tlsca.${BANK_ORG}.sworna.example.com-cert.pem"
 
 check_bundle() {
   local missing=0
-  [[ -d "$org_dir" ]] || { log_error "join bundle missing: $org_dir"; missing=1; }
-  [[ -d "$orderer_dir" ]] || { log_error "join bundle missing: $orderer_dir"; missing=1; }
-  [[ -f "$block_file" ]] || { log_error "join bundle missing: $block_file"; missing=1; }
-  [[ $missing -eq 0 ]]
+  [[ -d "$KEYS_DIR/$OWNER_NODE" ]] || { log_error "join bundle missing: $KEYS_DIR/$OWNER_NODE (token wallets + fsc identity)"; missing=1; }
+  [[ -f "$ORDERER_CA" ]] || { log_error "join bundle missing: orderer TLS CA ($ORDERER_CA)"; missing=1; }
+  return $missing
 }
 
-peer_up() {
+bank_up() {
   check_bundle
-  export SWORNA_CB_HOST="${SWORNA_CB_HOST:?SWORNA_CB_HOST (CB host IP) must be set}" \
+  export BANK_ORG BANK_MSP BANK_PEER_PORT BANK_CC_PORT BANK_CA_PORT \
+         BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
+         SWORNA_CB_HOST="${SWORNA_CB_HOST:?SWORNA_CB_HOST (CB host IP) must be set}" \
          DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
-
+  # Pre-create the CA data dir as the deploying user so Docker does not create
+  # it root-owned (which would block host-side enrollment later).
+  mkdir -p "$NETWORK/organizations/fabric-ca/${BANK_ORG}"
   log_info "starting ${BANK_ORG} CA + peer containers"
-  docker compose --profile "$BANK_PROFILE" -f compose/compose-bank-peer.yaml up -d
+  docker compose -f compose/compose-bank-peer.yaml up -d
 
   log_info "waiting for the ${BANK_ORG} peer to accept connections"
-  . "$NETWORK/scripts/envVar.sh"
-  export TEST_NETWORK_HOME="$NETWORK"
   local ok=0
   for i in $(seq 1 30); do
-    if setGlobals "${BANK_NUM}" >/dev/null 2>&1 && peer lifecycle chaincode queryinstalled >/dev/null 2>&1; then
-      ok=1; break
-    fi
+    if peer lifecycle chaincode queryinstalled >/dev/null 2>&1; then ok=1; break; fi
     sleep 2
   done
   [[ $ok -eq 1 ]] || { log_error "peer did not come up"; return 1; }
+}
 
-  log_info "joining peer0.${BANK_ORG} to channel '${CHANNEL}'"
-  setGlobals "${BANK_NUM}" >/dev/null 2>&1
-  peer channel join -b "$block_file"
+enroll_org() {
+  [[ -d "$ORG_DIR/peers" ]] && { log_info "org identity already enrolled"; return 0; }
+  log_info "enrolling ${BANK_MSP} identities against the bank's own CA"
+  export BANK_ORG BANK_MSP BANK_CA_PORT BANK_CA_NAME
+  . "$NETWORK/organizations/fabric-ca/registerEnroll-bank.sh"
+}
 
-  install_ccaas
+render_conf() {
+  local tpl="$ROOT/token-services/owner/conf/core.yaml.tpl"
+  local out="$ROOT/token-services/owner/conf/${OWNER_NODE}/core.yaml"
+  local demo=""
+  case "$k" in
+    1) demo="alice,bob" ;;
+    2) demo="carlos,dan" ;;
+  esac
+  mkdir -p "$(dirname "$out")"
+  log_info "rendering owner conf -> token-services/owner/conf/${OWNER_NODE}/core.yaml"
+  OWNER_NODE="$OWNER_NODE" OWNER_INDEX="$k" BANK_ORG="$BANK_ORG" BANK_MSP="$BANK_MSP" \
+    PEER_PORT="$BANK_PEER_PORT" OWNER_P2P="$OWNER_P2P_PORT" BANK_CODE="$BANK_CODE" \
+    POOL_SIZE="${POOL_SIZE:-10}" DEMO_WALLETS="$demo" \
+    OWNERS="${SWORNA_OWNERS:-owner1 owner2}" \
+    python3 "$ROOT/scripts/render-owner-conf.py" "$tpl" > "$out"
+}
+
+export_org_json() {
+  local cfgdir="$NETWORK/configtx-bank"
+  mkdir -p "$cfgdir"
+  sed -e "s|@@BANK_MSP@@|$BANK_MSP|g" -e "s|@@BANK_ORG@@|$BANK_ORG|g" -e "s|@@PEER_PORT@@|$BANK_PEER_PORT|g" \
+    "$NETWORK/configtx/configtx.bank.yaml.tpl" > "$cfgdir/configtx.yaml"
+  log_info "exporting public org MSP JSON -> network/${BANK_ORG}-org.json"
+  FABRIC_CFG_PATH="$cfgdir" configtxgen -printOrg "$BANK_MSP" > "$NETWORK/${BANK_ORG}-org.json"
+}
+
+identity() {
+  bank_up
+  enroll_org
+  render_conf
+  export_org_json
+  echo
+  echo "Bank ${BANK_CODE} (${BANK_MSP}) identity ready."
+  echo "  -> send $NETWORK/${BANK_ORG}-org.json to the CB host and run:"
+  echo "       ./scripts/onboard-bank.sh ${BANK_MSP} <path-to-org-json>"
+  echo "  -> then re-run:  ./scripts/bank-network.sh join   (or ./scripts/deploy-bank.sh ${BANK_CODE})"
+}
+
+fetch_and_join() {
+  log_info "fetching genesis block for channel '${CHANNEL}' from the CB orderer"
+  local block="$NETWORK/channel-artifacts/${CHANNEL}.block"
+  mkdir -p "$NETWORK/channel-artifacts"
+  peer channel fetch oldest "$block" \
+    -o orderer.sworna.example.com:7050 --ordererTLSHostnameOverride orderer.sworna.example.com \
+    --tls --cafile "$ORDERER_CA"
+  log_info "joining peer0.${BANK_ORG} to '${CHANNEL}'"
+  peer channel join -b "$block"
 }
 
 install_ccaas() {
@@ -101,8 +152,8 @@ install_ccaas() {
   tempdir=$(mktemp -d)
   trap 'rm -rf -- "$tempdir"' RETURN
   mkdir -p "$tempdir/src" "$tempdir/pkg"
-  printf '{"address":"%s_%s_ccaas:%s","dial_timeout":"10s","tls_required":false}\n' \
-    "$CCAAS_PEERNAME" "$CC_NAME" "$CCAAS_SERVER_PORT" > "$tempdir/src/connection.json"
+  printf '{"address":"{{.peername}}_%s_ccaas:%s","dial_timeout":"10s","tls_required":false}\n' \
+    "$CC_NAME" "$CCAAS_SERVER_PORT" > "$tempdir/src/connection.json"
   printf '{"type":"ccaas","label":"%s_%s"}\n' "$CC_NAME" "$CC_VERSION" > "$tempdir/pkg/metadata.json"
   tar -C "$tempdir/src" -czf "$tempdir/pkg/code.tar.gz" .
   tar -C "$tempdir/pkg" -czf "$NETWORK/${CC_NAME}.tar.gz" metadata.json code.tar.gz
@@ -116,24 +167,54 @@ install_ccaas() {
     peer lifecycle chaincode install "$CC_NAME.tar.gz"
   fi
 
+  log_info "approving the chaincode definition for ${BANK_MSP}"
+  peer lifecycle chaincode approveformyorg -o orderer.sworna.example.com:7050 \
+    --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
+    --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
+    --package-id "$PACKAGE_ID"
+
   log_info "starting ${CCAAS_PEERNAME}_${CC_NAME}_ccaas chaincode container"
+  docker rm -f "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" >/dev/null 2>&1 || true
   docker run --rm -d --name "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" --network fabric_test \
     -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:${CCAAS_SERVER_PORT} \
     -e CHAINCODE_ID="$PACKAGE_ID" -e CORE_CHAINCODE_ID_NAME="$PACKAGE_ID" \
     "${CC_NAME}_ccaas_image:latest"
 }
 
-peer_down() {
+join() {
+  check_bundle
+  bank_up
+  if peer channel list 2>/dev/null | grep -q "^${CHANNEL}$"; then
+    log_info "peer already joined to '${CHANNEL}'"
+  else
+    if ! fetch_and_join; then
+      echo
+      echo "This bank is not onboarded on the CB yet."
+      echo "  On the CB host run:  ./scripts/onboard-bank.sh ${BANK_MSP} <path-to-${BANK_ORG}-org.json>"
+      echo "  then re-run:         ./scripts/deploy-bank.sh ${BANK_CODE}"
+      exit 0
+    fi
+  fi
+  install_ccaas
+  echo
+  echo "Bank ${BANK_CODE} peer joined '${CHANNEL}' and the chaincode is running."
+}
+
+down() {
   docker rm -f "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" 2>/dev/null || true
-  export SWORNA_CB_HOST="${SWORNA_CB_HOST:-127.0.0.1}" \
+  export BANK_ORG BANK_MSP BANK_PEER_PORT BANK_CC_PORT BANK_CA_PORT \
+         BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
+         SWORNA_CB_HOST="${SWORNA_CB_HOST:-127.0.0.1}" \
          DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
-  docker compose --profile "$BANK_PROFILE" -f compose/compose-bank-peer.yaml down
+  docker compose -f compose/compose-bank-peer.yaml down
 }
 
 case "$MODE" in
-  up)   peer_up ;;
-  down) peer_down ;;
-  *)    echo "usage: $0 up|down" >&2; exit 1 ;;
+  up)        bank_up ;;
+  identity)  identity ;;
+  join)      join ;;
+  down)      down ;;
+  *)         echo "usage: $0 up|identity|join|down" >&2; exit 1 ;;
 esac
 
 log_info "done."
