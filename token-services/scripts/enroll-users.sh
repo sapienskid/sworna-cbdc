@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 #
-# Register and enroll all identities needed for the CB's token network:
-#   - the CB's own: FSC node identities (issuer, auditor) + their wallet users
-#   - the demo banks' owners + wallets (via ./enroll-owner.sh)
+# Enroll the CENTRAL BANK's token identities at the token CA:
+#   - FSC node identities for issuer + auditor
+#   - the issuer / auditor wallet users
 #
-# Run from token-services/ with the token CA up (deploy-centralbank.sh does this
-# automatically on a fresh clone).
+# Bank owners are NOT enrolled here — each bank's identity + wallets are minted
+# by the CB when the bank is created and provisioned
+# (`POST /api/v1/admin/banks/{code}/provision` -> app/provisioning.py).
+#
+# Run from token-services/ with the token CA up.
 set -Exeuo pipefail
 
 # enroll the token-CA admin
@@ -24,7 +27,3 @@ fabric-ca-client register -u http://localhost:27054 --id.name auditor --id.secre
 fabric-ca-client enroll -u http://auditor:password@localhost:27054 -M "$(pwd)/keys/auditor/aud/msp"
 fabric-ca-client register -u http://localhost:27054 --id.name issuer --id.secret password --id.type client
 fabric-ca-client enroll -u http://issuer:password@localhost:27054 -M "$(pwd)/keys/issuer/iss/msp"
-
-# demo banks' owners + wallets (the CB mints all token identities)
-./scripts/enroll-owner.sh owner1 alice,bob
-./scripts/enroll-owner.sh owner2 carlos,dan

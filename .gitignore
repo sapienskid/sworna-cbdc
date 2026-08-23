@@ -32,13 +32,14 @@ network/organizations/fabric-ca/org1/
 network/organizations/fabric-ca/org2/
 network/organizations/fabric-ca/ordererOrg/
 network/organizations/ca/
-network/addOrg3/fabric-ca/org3/
 *.block
 channel-artifacts/
 ledger-data/
 
-# Fabric samples clone (de-risking copy) — no longer used
-# fabric-samples/
+# Rendered FSC node confs (generated from core.yaml.tpl by render-owner-conf.py)
+token-services/auditor/conf/core.yaml
+token-services/issuer/conf/core.yaml
+token-services/owner/conf/*/core.yaml
 
 # CouchDB / DB data
 *.db
