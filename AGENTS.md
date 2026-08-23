@@ -13,7 +13,6 @@ runbook is [docs/SETUP.md](docs/SETUP.md); read it before doing anything.
 | Bank k | `./scripts/deploy-bank.sh 00k` | own CA + peer + chaincode + owner + portal; needs `SWORNA_CB_HOST` + `SWORNA_OWNER_<NAME>_HOST` |
 | Bank peer (low-level) | `BANK_CODE=00k ./scripts/bank-network.sh up\|identity\|join\|down` | identity exports `bank{k}-org.json`; join needs CB onboarding |
 | Export bundles | `./scripts/export-join-bundles.sh` | CB host → `dist-bank-bundles/bank<CODE>.tar.gz` |
-| Demo | `./scripts/demo.sh` | needs owner1/owner2 running |
 | Teardown | `./network/network.sh down` | also `rm -rf token-services/{keys,data} backend/sworna.db dist-bank-bundles` for a full reset |
 
 ## Rules

@@ -109,7 +109,7 @@ backend paths derive from the repo location (`backend/app/paths.py`). See
 and [docs/token-network/09-distributed-deployment.md](docs/token-network/09-distributed-deployment.md)
 for the distributed N-VM topology (implemented, pending live validation).
 
-See [docs/DEMO.md](docs/DEMO.md) for the runbook and [docs/token-network/](docs/token-network/) for how the token network works.
+See [docs/SETUP.md](docs/SETUP.md) for the runbook and [docs/token-network/](docs/token-network/) for how the token network works.
 
 ---
 
@@ -148,7 +148,6 @@ See [docs/DEMO.md](docs/DEMO.md) for the runbook and [docs/token-network/](docs/
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architectural design: two-tier model, UTXO + ZK, roles, network topology, transaction flows, deployment |
 | [docs/SETUP.md](docs/SETUP.md) | **Step-by-step host setup runbook** (agent-executable): preflight → clone → Fabric tools → CB bring-up → provisioning → bank bring-up → verification |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How the single repo is deployed so machines act as central bank / banks / customers; ports, identity, 1→3→25-host progression |
-| [docs/DEMO.md](docs/DEMO.md) | Demo scenario and runbook (verified on the dev laptop) |
 | [docs/FULL-BANKING-SYSTEM.md](docs/FULL-BANKING-SYSTEM.md) | The complete banking-system subsystem map (ledger core, central bank, commercial bank, retail, compliance, infrastructure) |
 | [docs/API.md](docs/API.md) | REST API catalog: FastAPI banking layer + token-sdk service endpoints |
 | [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Performance benchmarking methodology (Caliper) and Fabric-X evaluation notes (stub) |

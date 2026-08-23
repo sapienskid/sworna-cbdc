@@ -7,7 +7,8 @@
 
 One repository; a machine's role is decided by **which script it runs** and
 **which keys it holds**. The deployment is **always distributed** — the CB and
-every bank are separated onto their own hosts.
+every bank are separated onto their own hosts, and the registry starts empty:
+banks are created and onboarded at runtime while the network stays up.
 
 | Host | Script | Runs |
 |---|---|---|
@@ -15,7 +16,7 @@ every bank are separated onto their own hosts.
 | Bank `k` | `scripts/deploy-bank.sh 00k` | ca_bank{k} · peer0.bank{k} · chaincode · owner{k} · bank portal |
 
 Bank naming is numeric: code `001`→`owner1`/`bank1`/`Bank1MSP`, `002`→`owner2`/
-`bank2`/`Bank2MSP`, … (friendly display names like `banka` are stored in the
+`bank2`/`Bank2MSP`, … (friendly display names are free-form strings stored in the
 banking registry). Ports per bank `k`: peer `9051+2000(k−1)`, CA
 `8054+1000(k−1)`, owner REST/P2P `9200+100(k−1)` / `9201+100(k−1)`.
 
@@ -122,9 +123,12 @@ The script does:
 
 ### 3.1 First-run identity enrollment (automatic)
 
-`token-services/scripts/enroll-users.sh` creates the CB's FSC identities
-(issuer/auditor), the issuer/auditor wallets, and the demo owners' identities
-(`owner1`/`owner2` + `alice,bob`/`carlos,dan`). Guarded — safe to re-run.
+`token-services/scripts/enroll-users.sh` enrolls the CB's own identities only:
+the issuer + auditor FSC node identities and their wallets. Bank owners are
+enrolled later, per bank, by provisioning. Guarded — safe to re-run.
+
+> The registry starts **empty** — no banks exist until you create them (§4.1).
+> There are no demo banks or demo accounts in a production deployment.
 
 ### 3.2 Wait conditions
 
@@ -150,21 +154,33 @@ Check the CB portal **Ledger** page shows `settlement` with blocks.
 
 ---
 
-## 4. Onboarding a bank (the 5-step loop, per bank)
+## 4. Onboarding a bank (live — the network keeps running)
+
+Every step below happens while the central bank is up; nothing restarts the
+orderer, the ledger, or any existing bank.
 
 ### 4.1 Create the bank in the registry
 
 From the CB portal (Banks → new) or `POST /api/v1/banks` with `code`, `name`,
-`msp_id` (e.g. `Bank3MSP`), `owner_node` (e.g. `owner3`), `pool_size`.
+`msp_id` (e.g. `Bank3MSP`), `owner_node` (e.g. `owner3`) and optionally
+`staff_username` (creates that bank's staff console login).
 
-### 4.2 Bank `k` VM — provision its Fabric identity
+### 4.2 Provision + export
 
-Extract the bank's join bundle (token wallets) under the repo root, then:
+```bash
+curl -X POST http://localhost:8000/api/v1/admin/banks/<CODE>/provision \
+  -H "Authorization: Bearer $TOKEN"     # mints the owner identity + wallet pool
+./scripts/export-join-bundles.sh        # dist-bank-bundles/bank<CODE>.tar.gz
+```
+
+### 4.3 Bank `k` VM — provision its Fabric identity
+
+Extract the bank's join bundle under the repo root, then:
 
 ```bash
 ls ~/CBDC/token-services/keys/owner${k}        # token wallets from the bundle
 export SWORNA_CB_HOST=<CB-IP>
-export SWORNA_OWNERS="owner1 owner2 ..."       # all owner nodes
+export SWORNA_OWNERS="owner1 owner2 ..."       # ALL owner nodes
 export SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ... # every bank VM IP
 cd ~/CBDC && ./scripts/deploy-bank.sh 00k
 ```
@@ -173,27 +189,32 @@ This starts the bank's **own CA + peer**, enrolls the bank's org identity
 (private keys stay on this VM), renders the owner conf and exports its **public**
 org MSP JSON to `network/bank{k}-org.json`.
 
-### 4.3 CB — add the bank to the channel
+### 4.4 CB — add the bank to the channel (live)
 
 ```bash
 cd ~/CBDC
 ./scripts/onboard-bank.sh Bank{k}MSP <path-to-bank{k}-org.json>
 ```
 
-### 4.4 Bank `k` VM — join + start
+Admits the org via a channel config update, refreshes the CB engine's owner
+resolvers + DNS, and rolling-recreates issuer/auditor (~10–20 s). The ledger,
+peers and existing banks are unaffected throughout.
+
+### 4.5 Bank `k` VM — join + start
 
 Re-run `./scripts/deploy-bank.sh 00k` — it fetches the genesis block from the
 orderer, joins `settlement`, installs + approves the chaincode, runs the bank's
 chaincode container, starts the owner service and the portal.
 
-### 4.5 CB — commit the chaincode (once, after all banks are on)
+### 4.6 CB — update the endorsement policy
 
 ```bash
 cd ~/CBDC && ./scripts/commit-chaincode.sh
 ```
 
-This commits the chaincode with endorsement policy
-`OR(CentralBankMSP, Bank1MSP, ..., BankNMSP)`.
+Upgrade-aware: it bumps the sequence and re-commits with
+`OR(CentralBankMSP, Bank1MSP, ..., BankNMSP)`. Run it after each new bank is
+onboarded so the new bank can endorse its customers' transactions.
 
 ---
 
@@ -202,8 +223,8 @@ This commits the chaincode with endorsement policy
 `deploy-centralbank.sh` (and `scripts/export-join-bundles.sh`) exports
 `dist-bank-bundles/bank<CODE>.tar.gz` per registered bank. Each contains ONLY:
 
-- `token-services/keys/<owner_node>` — the bank's token wallets (its fsc
-  identity, demo wallets, provisioned pool wallets), minted by the CB's token CA;
+- `token-services/keys/<owner_node>` — the bank's token identities (its fsc
+  node identity + provisioned pool wallets), minted by the CB's token CA;
 - the **public** orderer TLS CA cert + tlsca cert.
 
 No bank Fabric keys, no CA data, no genesis block, no orderer private keys.
@@ -245,27 +266,22 @@ Containers cannot read the host's `/etc/hosts`; compose `extra_hosts` are
 
 ### 7.3 End-to-end (once banks are up)
 
+Exercise the money flow through the APIs (from the CB host):
+
 ```bash
-cd ~/CBDC && ./scripts/demo.sh   # issue -> transfers (intra + cross) -> redeem
+# issue SWR to a customer account of an onboarded bank
+curl -X POST http://localhost:8000/api/v1/admin/issue \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to_account":"SWR-003-00000001","amount":"100.00","reference":"first issue"}'
 ```
 
----
-
-## 8. Demo reference
-
-| Account | Owner | Wallet |
-|---|---|---|
-| `SWR-001-00000001` | Alice Adhikari | `alice` |
-| `SWR-001-00000002` | Bob Basnet | `bob` |
-| `SWR-002-00000001` | Carlos Chhetri | `carlos` |
-| `SWR-002-00000002` | Dan Dhakal | `dan` |
-
-Logins: CB `cbadmin`/`sworna-cb` · bank staff `<name>_admin`/`sworna-bank` ·
-customers `alice`/`bob`/`carlos`/`dan`/`sworna-pass`.
+Then from the portals: the customer pays another customer (same bank), across
+banks, and the CB redeems — balances update after each commit, and every
+transaction is visible (commitments only) to the auditor.
 
 ---
 
-## 9. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -284,7 +300,7 @@ Logs: `/tmp/sworna-backend.log`, `/tmp/sworna-web.log`, `docker logs <container>
 
 ---
 
-## 10. Full reset
+## 9. Full reset
 
 ```bash
 cd ~/CBDC
@@ -295,7 +311,7 @@ rm -rf token-services/{keys,data} backend/sworna.db dist-bank-bundles
 
 ---
 
-## 11. For AI agents
+## 10. For AI agents
 
 - **Idempotency:** scripts and provisioning calls may be re-run safely; enroll
   and pool-provisioning only create what is missing.

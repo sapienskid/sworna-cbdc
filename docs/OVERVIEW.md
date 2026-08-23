@@ -53,15 +53,15 @@ We also chose **privacy by default**: transaction amounts and parties are hidden
                   ▼                        ▲
         ┌─────────┴──────┐      ┌─────────┴──────┐
         │  COMMERCIAL    │      │  COMMERCIAL    │
-        │  BANK A        │◄────►│  BANK B        │  ← banks pay each other (settlement)
+        │  BANK 1        │◄────►│  BANK 2 …  N   │  ← banks pay each other (settlement)
         └─────────┬──────┘      └─────────┬──────┘
                   │                       │
                     TIER 2  (retail / customers)
                   │                       │
-        ┌─────────▼──────┐      ┌─────────▼──────┐
-        │  alice, bob    │      │  carol, dan    │  ← customers pay each other
-        │  (wallets)     │      │  (wallets)     │
-        └────────────────┘      └────────────────┘
+         ┌─────────▼──────┐      ┌─────────▼──────┐
+         │  customers     │      │  customers     │  ← customers pay each other
+         │  (wallets)     │      │  (wallets)     │
+         └────────────────┘      └────────────────┘
 ```
 
 - **Tier 1:** the central bank issues SWR to banks and redeems it back. Banks settle with each other.
@@ -85,8 +85,8 @@ We also chose **privacy by default**: transaction amounts and parties are hidden
    ┌────────────────┼──────────────────────────────┼──────────┐
    │                │                              │          │
    │    ┌───────────▼─────────┐      ┌─────────────▼────────┐ │
-   │    │  Bank A service     │      │  Bank B service      │ │
-   │    │  (alice, bob)       │      │  (carol, dan)        │ │
+   │    │  Bank 1 service     │      │  Bank 2 … N services │ │
+   │    │  (customer wallets) │      │  (customer wallets)  │ │
    │    └───────────┬─────────┘      └─────────────┬────────┘ │
    │                └──────────┬───────────────────┘         │
    │                     banks talk privately                │
@@ -94,11 +94,11 @@ We also chose **privacy by default**: transaction amounts and parties are hidden
                                 │
    ┌────────────────────────────┼────────────────────────────┐
    │    HYPERLEDGER FABRIC  —  shared, tamper-proof ledger   │
-   │    Orderers (agreement) · Peers (one per org) · CouchDB │
+   │    Orderer (agreement) · Peers (one per org)            │
    │    Token chaincode verifies every transaction           │
    └─────────────────────────────────────────────────────────┘
 
-   Plus: Blockchain Explorer (see the ledger live) · React wallet app (customers)
+   Plus: React wallet app (customers) · CB/bank admin consoles
 ```
 
 The idea: banks negotiate payments privately between themselves, then record the **proof** of the payment on the shared ledger where it cannot be changed and can be audited.
@@ -107,11 +107,9 @@ The idea: banks negotiate payments privately between themselves, then record the
 
 | Player | Role in the network | What they can do |
 |---|---|---|
-| **Central bank** | Issuer + Auditor | Create/destroy money; see the whole system; approve every transaction |
-| **Bank A** | Owner node (wallets) | Holds money for alice & bob; processes their payments |
-| **Bank B** | Owner node (wallets) | Holds money for carol & dan; processes their payments |
+| **Central bank** | Issuer + Auditor | Create/destroy money; see the whole system; approve every transaction; onboard banks |
+| **Commercial bank k** | Owner node (wallets) + own network node | Holds money for its customers; processes their payments |
 | **Customers** | Wallet users | Send and receive money through an app |
-| **Team (us)** | Builders | Run the network, the backend, and the apps |
 
 ## 7. The full banking system — what we are ultimately building
 
@@ -142,21 +140,19 @@ Documentation    │   Working demo      │   Full banking system   │   Perfo
 |---|---|---|---|
 | **1** | Documentation & planning | The full plan, architecture, and decisions written down | Everyone |
 | **2** | Foundation | Prove the tech stack works on our laptops | Engineers |
-| **3** | Prototype demo (~2 weeks) | Central bank + 2 banks + customers, wallets, admin console | Everyone — demo day |
-| **4** | Comprehensive system (1–3 months) | Full banking features, stronger consensus, compliance, spread across the lab's 25 machines | Everyone |
+| **3** | Prototype | Central bank + commercial banks (each on its own VM), wallets, admin console | Everyone — demo day |
+| **4** | Comprehensive system (1–3 months) | Full banking features, stronger consensus, compliance, more machines | Everyone |
 | **5** | Performance & security | Benchmarks, tuning, hardening | Engineers |
 | **6** | Future vision | Offline payments, cross-border, production readiness | Leadership |
 
-## 9. What the prototype demo will look like (Phase 3)
+## 9. How a bank joins the network
 
-A guided ~10-minute story:
+Onboarding a new commercial bank is a live operation — the network keeps running:
 
-1. The **central bank** creates 10,000 SWR and sends it to Bank A and Bank B.
-2. **Alice** pays **bob** 250 SWR (same bank).
-3. **Bob** pays **carol** at Bank B — a **cross-bank** payment.
-4. **Dan** checks his wallet and history.
-5. The **central bank** redeems (burns) 500 SWR.
-6. On screen the whole time: the **wallet app**, the **central-bank admin console**, and the **blockchain explorer** showing every transaction recorded permanently.
+1. The **central bank** registers the bank and mints its wallet keys.
+2. The **bank** stands up its own node on its own machine and generates its own identity.
+3. The **central bank** admits the bank's org to the shared ledger — no downtime.
+4. The **bank** connects, and its customers can immediately hold and pay with SWR.
 
 ## 10. Tech at a glance
 
@@ -166,7 +162,6 @@ A guided ~10-minute story:
 | Token layer | Issue / transfer / redeem with privacy (Zero-Knowledge Proofs) | Go (prebuilt) |
 | Banking backend | Accounts, customers, admin, reports | Python (FastAPI) |
 | Apps | Customer wallet, central-bank & bank consoles | React |
-| Explorer | Live view of the ledger | — |
 | Benchmarking | Measure speed & reliability | Hyperledger Caliper |
 
 ## 11. Where to go deeper

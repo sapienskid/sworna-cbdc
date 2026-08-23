@@ -80,11 +80,11 @@ This document is the master roadmap. Each phase has a goal, a task list, exit cr
 
 | # | Task | Detail |
 |---|---|---|
-| W2.1 | FastAPI backend | Customer/bank/account registry (SQLite); wraps owner/issuer/auditor REST APIs (owner URLs derived from the owner node — `app/owner_urls.py`); seeds demo banks 001/002 + accounts. |
+| W2.1 | FastAPI backend | Customer/bank/account registry (SQLite); wraps owner/issuer/auditor REST APIs (owner URLs derived from the owner node — `app/owner_urls.py`); the registry starts empty — banks are created at runtime. |
 | W2.2 | Basic AML flags | Demo-level account `status` (active / flagged / frozen) + a transfer limit check in the backend (not on-chain yet). |
 | W2.3 | Admin console (React) | CB: issue/redeem, total supply + per-bank circulation, ledger monitor; bank view: customers, balances, activity. |
 | W2.4 | Wallet SPA (React) | Customer login; balance, send, receive, transaction history (served by FastAPI). |
-| W2.5 | Demo scenario + seed script | One-command issue → distribute → retail transfers → cross-bank payment → redeem. `docs/DEMO.md` + `scripts/demo.sh`. |
+| W2.5 | Runtime onboarding verification | Create a bank → provision → bundle → bank identity → onboard (live) → join → commit; issue → transfers (intra + cross) → redeem through the APIs/portals. |
 | W2.6 | Tests | Happy-path e2e covering both REST layers (token engine + FastAPI). |
 | W2.7 | Documentation | ARCHITECTURE.md, API.md, PHASES.md, SETUP/DEPLOYMENT runbooks, ADRs 0001–0009. |
 | W2.8 | Distributed demo | CB host + one VM per bank; cross-host DNS via generated `extra_hosts` + `/etc/hosts`. |

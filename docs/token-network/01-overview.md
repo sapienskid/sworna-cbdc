@@ -24,10 +24,9 @@ The network has two layers:
 | **Owner `k`** | bank `k` | idemix wallets (customers) | holds and transfers SWR |
 | **Chaincode** | every org's peer | ZKAT-DLOG params | validates proofs, owns the UTXO ledger |
 
-The demo seeds two banks (`owner1` = banka, `owner2` = bankb); more are added via
-`scripts/deploy-bank.sh` + `scripts/onboard-bank.sh` (each bank self-provisions
-its Fabric org and the CB adds it to the channel — see
-[SETUP.md](../SETUP.md) §4).
+Banks are added at **runtime** — each self-provisions its Fabric org on its own
+VM (`scripts/deploy-bank.sh`) and the CB admits it to the channel
+(`scripts/onboard-bank.sh`); see [SETUP.md](../SETUP.md) §4.
 
 ## Money model
 

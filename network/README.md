@@ -36,12 +36,12 @@ the repo root (see the root README, or `./scripts/install-fabric-tools.sh`).
 - `compose/` — docker compose for CAs, orderers, peers; `compose-bank-peer.yaml`
   is the parameterized per-bank CA + peer.
 - `scripts/` — channel creation, CCAAS deployment, config-update helpers.
-- `addOrg3/` — **DEPRECATED.** The old "bank joins on the CB host" flow. Banks
-  now self-provision on their own VMs; use `scripts/onboard-bank.sh` instead.
+- Banks join via `scripts/onboard-bank.sh` (channel config update) — the old
+  `addOrg3/` flow has been removed.
 
 ## Notes
 
 - `bft-config/` and the `-bft`/couch/podman/deployCC paths are retained from the
   upstream network for future phases (SmartBFT, CouchDB); we currently run
   single Raft orderer + LevelDB + chaincode-as-a-service.
-- Docs: [docs/DEMO.md](../docs/DEMO.md) · [docs/token-network](../docs/token-network).
+- Docs: [docs/SETUP.md](../docs/SETUP.md) · [docs/token-network](../docs/token-network).

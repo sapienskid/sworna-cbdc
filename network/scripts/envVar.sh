@@ -20,10 +20,10 @@ TEST_NETWORK_HOME=${TEST_NETWORK_HOME:-${PWD}}
 export CORE_PEER_TLS_ENABLED=true
 export ORDERER_CA=${TEST_NETWORK_HOME}/organizations/ordererOrganizations/sworna.example.com/tlsca/tlsca.sworna.example.com-cert.pem
 export PEER0_ORG1_CA=${TEST_NETWORK_HOME}/organizations/peerOrganizations/centralbank.sworna.example.com/tlsca/tlsca.centralbank.sworna.example.com-cert.pem
-export PEER0_ORG2_CA=${TEST_NETWORK_HOME}/organizations/peerOrganizations/banka.sworna.example.com/tlsca/tlsca.banka.sworna.example.com-cert.pem
-export PEER0_ORG3_CA=${TEST_NETWORK_HOME}/organizations/peerOrganizations/bankb.sworna.example.com/tlsca/tlsca.bankb.sworna.example.com-cert.pem
 
-# Set environment variables for the peer org
+# Set environment variables for the peer org. The CB host operates ONLY the
+# central-bank org; banks operate their own orgs from their own VMs
+# (scripts/bank-network.sh sets its org env directly).
 setGlobals() {
   local USING_ORG=""
   if [ -z "$OVERRIDE_ORG" ]; then
@@ -32,23 +32,13 @@ setGlobals() {
     USING_ORG="${OVERRIDE_ORG}"
   fi
   infoln "Using organization ${USING_ORG}"
-  if [ $USING_ORG -eq 1 ]; then
+  if [ "$USING_ORG" -eq 1 ]; then
     export CORE_PEER_LOCALMSPID=CentralBankMSP
     export CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG1_CA
     export CORE_PEER_MSPCONFIGPATH=${TEST_NETWORK_HOME}/organizations/peerOrganizations/centralbank.sworna.example.com/users/Admin@centralbank.sworna.example.com/msp
     export CORE_PEER_ADDRESS=localhost:7051
-  elif [ $USING_ORG -eq 2 ]; then
-    export CORE_PEER_LOCALMSPID=BankAMSP
-    export CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA
-    export CORE_PEER_MSPCONFIGPATH=${TEST_NETWORK_HOME}/organizations/peerOrganizations/banka.sworna.example.com/users/Admin@banka.sworna.example.com/msp
-    export CORE_PEER_ADDRESS=localhost:9051
-  elif [ $USING_ORG -eq 3 ]; then
-    export CORE_PEER_LOCALMSPID=BankBMSP
-    export CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG3_CA
-    export CORE_PEER_MSPCONFIGPATH=${TEST_NETWORK_HOME}/organizations/peerOrganizations/bankb.sworna.example.com/users/Admin@bankb.sworna.example.com/msp
-    export CORE_PEER_ADDRESS=localhost:11051
   else
-    errorln "ORG Unknown"
+    errorln "ORG Unknown (the CB host only manages org 1 — CentralBankMSP)"
   fi
 
   if [ "$VERBOSE" = "true" ]; then

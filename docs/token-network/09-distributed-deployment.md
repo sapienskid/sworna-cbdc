@@ -2,7 +2,7 @@
 
 > **Status: IMPLEMENTED — pending live validation.** Each bank self-provisions
 > its own Fabric org on its own VM; the CB host owns only the central-bank org.
-> The scripts below pass static validation; run §6 before the demo day.
+> The scripts below pass static validation; run §6 before go-live.
 
 ## 1. Trust model (why it looks like this)
 
@@ -56,36 +56,44 @@ Host-level `/etc/hosts` (for host-run CLI + the backend):
    ```bash
    ./scripts/deploy-centralbank.sh --provision
    #   -> org1 network + channel `settlement` + chaincode installed/approved for the CB
-   #   -> token CA + issuer + auditor + backend + portal
-   #   -> per-bank join bundles in dist-bank-bundles/ (token wallets + orderer public certs)
+   #   -> token CA + issuer + auditor + backend + portal (registry starts EMPTY)
    ```
-2. **Bank `k` VM:** install the Fabric tools, extract its bundle, run:
+2. **CB VM — register a bank at runtime** (`POST /api/v1/banks` with `code`,
+   `name`, `msp_id=Bank{k}MSP`, `owner_node=owner{k}`, optional
+   `staff_username`), then provision it
+   (`POST /api/v1/admin/banks/<code>/provision` — mints the owner's FSC
+   identity + wallet pool) and export its bundle
+   (`./scripts/export-join-bundles.sh`).
+3. **Bank `k` VM:** install the Fabric tools, extract its bundle, run:
    ```bash
    export SWORNA_CB_HOST=<CB-IP>
-   export SWORNA_OWNERS="owner1 owner2"              # all banks
-   export SWORNA_OWNER_OWNER1_HOST=<bank1-IP> SWORNA_OWNER_OWNER2_HOST=<bank2-IP> ...
+   export SWORNA_OWNERS="owner1 owner2 ..."          # ALL banks
+   export SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ...    # every bank VM IP
    ./scripts/deploy-bank.sh 00k
    #   -> starts its own CA + peer, enrolls its org, renders the owner conf,
    #      exports network/bank{k}-org.json, prints "send this to the CB"
    ```
-3. **CB VM:** add the bank to the channel:
+4. **CB VM — live onboarding** (no downtime):
    ```bash
    ./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json
+   #   -> admits the org via a channel config update, refreshes the CB engine's
+   #      owner resolvers + DNS, rolling-recreates issuer/auditor (~10-20 s)
    ```
-4. **Bank `k` VM:** re-run `./scripts/deploy-bank.sh 00k` — it joins the
+5. **Bank `k` VM:** re-run `./scripts/deploy-bank.sh 00k` — it joins the
    channel, installs + approves the chaincode, runs its CCAAS container, starts
    the owner service and the portal.
-5. **CB VM:** once all banks are on, commit the chaincode:
+6. **CB VM:** update the endorsement policy to include every onboarded bank:
    ```bash
-   ./scripts/commit-chaincode.sh        # OR policy over the CB + all banks
+   ./scripts/commit-chaincode.sh        # upgrade-aware: bumps the sequence
    ```
+   Re-run this step after each new bank is onboarded.
 
 ## 5. Join bundle (shrunk — no secrets leak)
 
 `scripts/export-join-bundles.sh` exports `dist-bank-bundles/bank<CODE>.tar.gz`
 containing ONLY:
-- `token-services/keys/<owner_node>` — the bank's token wallets (its fsc
-  identity + demo wallets + provisioned pool wallets), minted by the CB's token CA;
+- `token-services/keys/<owner_node>` — the bank's token identities (its fsc
+  node identity + provisioned pool wallets), minted by the CB's token CA;
 - the **public** orderer TLS CA cert + tlsca cert.
 
 No bank Fabric keys, no CA data, no genesis block, no orderer private keys.

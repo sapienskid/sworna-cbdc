@@ -54,20 +54,25 @@ Customer machines   a browser only (the bank portal)
 ```bash
 # CB VM
 ./scripts/deploy-centralbank.sh --provision
-#   -> org1 network + chaincode approved + engine + portal
-#   -> dist-bank-bundles/bank<CODE>.tar.gz (one per registered bank)
+#   -> org1 network + chaincode approved + engine + portal (registry starts empty)
+
+# CB VM — register a bank at runtime (while everything is up)
+curl -X POST http://localhost:8000/api/v1/banks -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"001","name":"my bank","msp_id":"Bank1MSP","owner_node":"owner1","staff_username":"mybank_admin"}'
+./scripts/export-join-bundles.sh        # -> dist-bank-bundles/bank001.tar.gz
 
 # Bank k VM (after extracting its bundle)
-export SWORNA_CB_HOST=<CB-IP> SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ...
-./scripts/deploy-bank.sh 00k            # identity phase -> bank{k}-org.json
+export SWORNA_CB_HOST=<CB-IP> SWORNA_OWNERS="owner1 ..." SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ...
+./scripts/deploy-bank.sh 001            # identity phase -> bank1-org.json
 
-# CB VM — add the bank to the channel
-./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json
+# CB VM — add the bank to the channel (live, no downtime)
+./scripts/onboard-bank.sh Bank1MSP bank1-org.json
 
 # Bank k VM — re-run to join + start
-./scripts/deploy-bank.sh 00k
+./scripts/deploy-bank.sh 001
 
-# CB VM — once, after all banks are on
+# CB VM — update the endorsement policy (after each new bank)
 ./scripts/commit-chaincode.sh
 ```
 
