@@ -328,25 +328,7 @@ Note the token model: Alice's 1,000 SWR input is split into 100 (to Dan) and 900
 | `bank` | id (001/002), name (banka/bankb), msp (Bank1MSP/Bank2MSP), ownerNode (owner1/owner2), created |
 | `transactionLog` | id, fromAccount, toAccount, amount, status, tokenTxId, timestamp |
 
-## 10. Team structure
-
-The team is divided **by work**. Everyone builds in parallel against pre-agreed API contracts, so no one waits on the blockchain layer.
-
-| Track | People | What they build |
-|---|---|---|
-| **Ledger & Network** | 3 (incl. the strongest technical person) | The Fabric network, certificates, token services — the blockchain foundation |
-| **Backend (Python)** | 3 | The banking backend: customers, accounts, payments, admin APIs |
-| **Frontend (React)** | 3 | The customer wallet and the central-bank / bank consoles |
-| **DevOps / Deployment** | 2 | One-command bring-up, per-host setup, deploying across the lab machines |
-| **QA & Testing** | 2 | End-to-end tests, load smoke test, demo verification |
-| **Docs & Demo** | 1–2 | Runbooks, demo script, keeping the documentation current |
-| **Lead** | 1 | Integration between tracks, decisions, unblocking, demo narration |
-
-- **Minimum team: ~9 people.** **Full team: ~15.**
-- The hardest track is the ledger — put the strongest/most curious person there.
-- Everyone else writes normal backend/web code against the frozen API contracts (see section 9), which keeps undergraduate teams productive from day one.
-
-## 11. Deliverables
+## 10. Deliverables
 
 1. **Working network** — a live Hyperledger Fabric network run by the central bank and commercial banks.
 2. **Working currency** — SWR tokens that can be issued, transferred (including between banks), and redeemed.
@@ -356,13 +338,13 @@ The team is divided **by work**. Everyone builds in parallel against pre-agreed 
 6. **Documentation** — architecture, decisions, API reference, and operating guides.
 7. **Performance report** — measured throughput and latency, with tuning recommendations.
 
-## 12. Timeline (overall estimate)
+## 11. Timeline (overall estimate)
 
 - **Working demonstration** — approximately **2 weeks** after setup begins: central bank + two banks + customer wallets + admin console + explorer, running on development machines.
 - **Comprehensive system** — approximately **1–3 months** after the demonstration: full banking features, compliance engine, interbank settlement, stronger consensus, and a distributed deployment across the lab network.
 - **Hardening** — ongoing: performance benchmarking, security review, and production-readiness improvements.
 
-## 13. Success criteria
+## 12. Success criteria
 
 The project is successful when we can show, end to end:
 

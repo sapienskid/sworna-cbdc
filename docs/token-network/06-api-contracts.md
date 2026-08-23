@@ -76,6 +76,6 @@ GET /auditor/accounts/alice/transactions
 
 ## Contract stability
 
-These contracts are the seam between the tracks. The FastAPI layer owns the
+These contracts are the boundary between the layers. The FastAPI layer owns the
 *user-facing* semantics (SWR major units, AML); the engine owns the *crypto*
 semantics (minor units, proofs). Changes to one must not leak into the other.

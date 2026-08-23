@@ -151,7 +151,6 @@ See [docs/DEMO.md](docs/DEMO.md) for the runbook and [docs/token-network/](docs/
 | [docs/DEMO.md](docs/DEMO.md) | Demo scenario and runbook (verified on the dev laptop) |
 | [docs/FULL-BANKING-SYSTEM.md](docs/FULL-BANKING-SYSTEM.md) | The complete banking-system subsystem map (ledger core, central bank, commercial bank, retail, compliance, infrastructure) |
 | [docs/API.md](docs/API.md) | REST API catalog: FastAPI banking layer + token-sdk service endpoints |
-| [docs/TEAM.md](docs/TEAM.md) | How the development team is divided: tracks, code ownership, API contracts, weekly plan |
 | [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Performance benchmarking methodology (Caliper) and Fabric-X evaluation notes (stub) |
 | [docs/REFERENCES.md](docs/REFERENCES.md) | Canonical bibliography of every source used for this plan |
 | [docs/ADRs/](docs/ADRs/) | Architecture Decision Records (0001–0009) |

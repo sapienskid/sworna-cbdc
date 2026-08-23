@@ -37,6 +37,6 @@ Lessons and sources gathered while building (2026-08).
 | # | Decision | Why |
 |---|---|---|
 | ADR-0010 | Keep token-sdk as the crypto engine; fork+own the sample services; Python owns all business logic | ZK is audited and not reimplementable by a small team |
-| — | Per-org peers in the engine config (issuer/auditor→CB, owner1→banka, owner2→bankb) | genuine 3-org settlement, each bank submits via its own org identity |
+| — | Per-org peers in the engine config (issuer/auditor→CB, one owner per bank) | genuine multi-org settlement, each bank submits via its own org identity |
 | — | Custom ledger monitor replaces explorer | upstream explorer is v3-incompatible |
-| — | bankb joins the channel after genesis (addOrg3 flow) | realistic "a bank joins the settlement network" narrative; reuses battle-tested scripts |
+| — | Each bank **self-provisions its Fabric org** on its own VM and the CB adds it to the channel via `scripts/onboard-bank.sh` (channel config update) | the bank's private keys never leave its VM; the CB admits orgs explicitly (later replaced the earlier `addOrg3` flow, which ran the bank's peer on the CB host) |
