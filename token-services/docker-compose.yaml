@@ -10,7 +10,11 @@ networks:
 services:
   auditor:
     hostname: auditor.sworna.example.com
+    network_mode: host
     restart: always
+    environment:
+      - PORT=9000
+      - CONF_DIR=/conf
     build:
       context: ./auditor
       dockerfile: ../Dockerfile
@@ -19,13 +23,6 @@ services:
       - ./auditor/conf:/conf:ro
       - ./keys:/var/fsc/keys:ro
       - ../network/organizations:/var/fsc/fabric/organizations:ro
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    expose:
-      - 9001
-    networks:
-      - test
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/api/v1/readyz"]
       interval: "5s"
@@ -34,7 +31,11 @@ services:
 
   issuer:
     hostname: issuer.sworna.example.com
+    network_mode: host
     restart: always
+    environment:
+      - PORT=9100
+      - CONF_DIR=/conf
     build:
       context: ./issuer
       dockerfile: ../Dockerfile
@@ -43,13 +44,6 @@ services:
       - ./issuer/conf:/conf:ro
       - ./keys:/var/fsc/keys:ro
       - ../network/organizations:/var/fsc/fabric/organizations:ro
-    ports:
-      - "9100:9000"
-      - "9101:9101"
-    expose:
-      - 9101
-    networks:
-      - test
     depends_on:
       auditor:
         condition: service_healthy

@@ -25,7 +25,11 @@ networks:
 services:
   owner:
     hostname: ${OWNER_HOSTNAME:?OWNER_HOSTNAME (e.g. owner1) must be set}.sworna.example.com
+    network_mode: host
     restart: always
+    environment:
+      - PORT=${OWNER_REST_PORT:-9200}
+      - CONF_DIR=/conf
     build:
       context: ./owner
       dockerfile: ../Dockerfile
@@ -34,10 +38,3 @@ services:
       - ./owner/conf/${OWNER_NODE}:/conf:ro
       - ./keys:/var/fsc/keys:ro
       - ../network/organizations:/var/fsc/fabric/organizations:ro
-    ports:
-      - "${OWNER_REST_PORT:?OWNER_REST_PORT must be set}:9000"
-      - "${OWNER_P2P_PORT:?OWNER_P2P_PORT must be set}:${OWNER_P2P_PORT:?OWNER_P2P_PORT must be set}"
-    expose:
-      - "${OWNER_P2P_PORT:?OWNER_P2P_PORT must be set}"
-    networks:
-      - test
