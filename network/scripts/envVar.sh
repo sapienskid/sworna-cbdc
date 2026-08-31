@@ -26,7 +26,7 @@ export PEER0_ORG1_CA=${TEST_NETWORK_HOME}/organizations/peerOrganizations/centra
 # (scripts/bank-network.sh sets its org env directly).
 setGlobals() {
   local USING_ORG=""
-  if [ -z "$OVERRIDE_ORG" ]; then
+  if [ -z "${OVERRIDE_ORG:-}" ]; then
     USING_ORG=$1
   else
     USING_ORG="${OVERRIDE_ORG}"
@@ -41,7 +41,7 @@ setGlobals() {
     errorln "ORG Unknown (the CB host only manages org 1 — CentralBankMSP)"
   fi
 
-  if [ "$VERBOSE" = "true" ]; then
+  if [ "${VERBOSE:-false}" = "true" ]; then
     env | grep CORE
   fi
 }
