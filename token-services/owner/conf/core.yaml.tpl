@@ -98,7 +98,6 @@ token:
       namespace: tokenchaincode # chaincode name
       driver: zkatdlog # privacy preserving driver (zero knowledge asset transfer)
       wallets:
-        defaultCacheSize: 3 # how many idemix keys to pre-generate
         owners:
 @@WALLETS@@
 
