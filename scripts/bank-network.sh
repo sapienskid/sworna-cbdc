@@ -55,6 +55,7 @@ export CORE_PEER_LOCALMSPID="$BANK_MSP"
 export CORE_PEER_MSPCONFIGPATH="$ORG_DIR/users/Admin@${BANK_ORG}.sworna.example.com/msp"
 export CORE_PEER_ADDRESS="localhost:${BANK_PEER_PORT}"
 export PEER_CA="$NETWORK/organizations/peerOrganizations/${BANK_ORG}.sworna.example.com/tlsca/tlsca.${BANK_ORG}.sworna.example.com-cert.pem"
+export CORE_PEER_TLS_ROOTCERT_FILE="$PEER_CA"
 
 check_bundle() {
   local missing=0
