@@ -39,7 +39,7 @@ owner_p2p = opt("OWNER_P2P")
 bank_code = opt("BANK_CODE")
 pool_size = int(opt("POOL_SIZE", "10"))
 demo = [w for w in opt("DEMO_WALLETS").split(",") if w]
-owners = [o for o in opt("OWNERS").split() if o]
+owners = [o for o in (opt("OWNERS") or opt("SWORNA_OWNERS")).split() if o]
 
 resolvers = []
 for node in owners:
