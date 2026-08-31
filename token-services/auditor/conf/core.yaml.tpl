@@ -35,7 +35,7 @@ fsc:
           id: issuer
           path: /var/fsc/keys/issuer/fsc/msp/signcerts/cert.pem
         addresses:
-          P2P: /dns4/issuer.sworna.example.com/tcp/9101
+          P2P: @@CB_HOST@@:9101
 @@OWNER_RESOLVERS@@
 
 # ------------------- Fabric Configuration -------------------------

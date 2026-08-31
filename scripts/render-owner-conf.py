@@ -30,6 +30,7 @@ def owner_p2p_port(node: str) -> int:
     return 9201 + 100 * (int(m.group(1)) - 1) if m else 9201
 
 
+cb_host = opt("SWORNA_CB_HOST", "127.0.0.1")
 owner_node = opt("OWNER_NODE", "owner")
 bank_org = opt("BANK_ORG")
 bank_msp = opt("BANK_MSP")
@@ -44,15 +45,16 @@ resolvers = []
 for node in owners:
     if node == owner_node:
         continue
+    host = opt(f"SWORNA_OWNER_{node.upper()}_HOST", "127.0.0.1")
     resolvers.append(
         "      - name: %s\n"
         "        identity:\n"
         "          id: %s\n"
         "          path: /var/fsc/keys/%s/fsc/msp/signcerts/cert.pem\n"
         "        addresses:\n"
-        "          P2P: /dns4/%s.sworna.example.com/tcp/%d\n"
+        "          P2P: %s:%d\n"
         "        aliases:\n"
-        "          - %s" % (node, node, node, node, owner_p2p_port(node), node)
+        "          - %s" % (node, node, node, host, owner_p2p_port(node), node)
     )
 
 wallets = []
@@ -71,6 +73,7 @@ with open(sys.argv[1]) as f:
     tpl = f.read()
 
 out = tpl
+out = out.replace("@@CB_HOST@@", cb_host)
 out = out.replace("@@OWNER_NODE@@", owner_node)
 out = out.replace("@@OWNER_P2P@@", owner_p2p)
 out = out.replace("@@BANK_ORG@@", bank_org)

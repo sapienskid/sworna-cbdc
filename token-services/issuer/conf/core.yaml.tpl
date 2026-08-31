@@ -35,7 +35,7 @@ fsc:
           id: auditor
           path: /var/fsc/keys/auditor/fsc/msp/signcerts/cert.pem
         addresses:
-          P2P: /dns4/auditor.sworna.example.com/tcp/9001
+          P2P: @@CB_HOST@@:9001
 @@OWNER_RESOLVERS@@
 
 # ------------------- Fabric Configuration -------------------------
