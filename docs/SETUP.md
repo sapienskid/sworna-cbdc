@@ -1,7 +1,8 @@
 # Sworna CBDC — Setup & Operations Guide
 
-> **Two-Tier CBDC Architecture:** Central Bank (CB) ↔ Commercial Banks ↔ Retail Customers  
-> All token transfers are zero-knowledge (Idemix/ZKP), audited on Hyperledger Fabric, settled on a private blockchain.
+> **Two-Tier CBDC on Hyperledger Fabric + Token-SDK**  
+> Central Bank ↔ Commercial Banks ↔ Retail Customers  
+> All token transfers are zero-knowledge (Idemix/ZKP), settled on the `settlement` channel.
 
 ---
 
@@ -16,6 +17,7 @@
 7. [Verification Checklist](#7-verification-checklist)
 8. [Normal Operations](#8-normal-operations)
 9. [Troubleshooting](#9-troubleshooting)
+10. [Port Reference](#10-port-reference)
 
 ---
 
@@ -25,7 +27,7 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │                       CENTRAL BANK VM                            │
 │  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────────┐ │
-│  │   Orderer   │  │  Peer (CB)  │  │  Token Engine            │ │
+│  │   Orderer   │  │  CB Peer    │  │  Token Engine            │ │
 │  │  :7050      │  │  :7051      │  │  Issuer FSC  :9100/9101  │ │
 │  └─────────────┘  └─────────────┘  │  Auditor FSC :9000/9001  │ │
 │  ┌─────────────────────────────┐   └──────────────────────────┘ │
@@ -34,9 +36,9 @@
 │  └─────────────────────────────┘   │  CB Portal    :5173      │ │
 │                                    └──────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────┘
-            ↕ Tailscale mesh (encrypted, private)
+           ↕ Tailscale mesh (encrypted, private)
 ┌────────────────────────────────────────────────────────┐
-│                  BANK A VM  (Bank1MSP)                 │
+│               BANK A VM  (Bank1MSP)                    │
 │  ┌──────────────┐  ┌──────────────────────────────┐   │
 │  │  Peer (B1)   │  │  Owner FSC (owner1)          │   │
 │  │  :9051       │  │  REST  :9200  P2P :9201      │   │
@@ -46,9 +48,9 @@
 │  │  :8054       │  │  :8000        │                  │
 │  └──────────────┘  └───────────────┘                  │
 └────────────────────────────────────────────────────────┘
-            ↕ Same Tailscale mesh
+           ↕ Same Tailscale mesh
 ┌────────────────────────────────────────────────────────┐
-│                  BANK B VM  (Bank2MSP)                 │
+│               BANK B VM  (Bank2MSP)                    │
 │  ┌──────────────┐  ┌──────────────────────────────┐   │
 │  │  Peer (B2)   │  │  Owner FSC (owner2)          │   │
 │  │  :11051      │  │  REST  :9300  P2P :9301      │   │
@@ -60,41 +62,40 @@
 └────────────────────────────────────────────────────────┘
 ```
 
+### Design Principles
+
+- **CB manages banks only** — mints/burns wholesale SWR into bank reserve wallets; never touches retail accounts
+- **Banks manage customers** — deposit from reserve, withdraw, facilitate P2P transfers
+- **Zero-knowledge transfers** — Idemix (Token-SDK) hides token amounts/owners; auditor validates ZK proofs
+- **Every transfer** is endorsed by the relevant peers, ordered by the CB orderer, committed to ledger
+
 ### Token Flow
 
 ```
-CB mints SWR → Bank Reserve Wallet (pool_00k_w1)
-                    ↓ bank deposit (zero-knowledge token transfer)
-                Customer Wallet (pool_00k_w2..w10)
-                    ↓ P2P transfer (intra or inter-bank)
-                Another Customer Wallet
+CB --[mint]--> Bank Reserve Wallet (pool_00k_w1)
+                    |
+               [bank deposit]
+                    |
+               Customer Wallet (pool_00k_w2..w10)
+                    |
+          [P2P transfer — intra or inter-bank]
+                    |
+               Another Customer Wallet
 ```
-
-Every token transfer is:
-1. **Audited** by the CB Auditor FSC node (ZK proof validated)
-2. **Endorsed** by the relevant Fabric peer(s)
-3. **Ordered** by the CB Orderer and **committed** to the `settlement` channel
 
 ---
 
 ## 2. Prerequisites
 
 **All VMs:**
-- Ubuntu 22.04 / 24.04 LTS
-- Docker Engine ≥ 26, Docker Compose v2 (`docker compose`, never `docker-compose`)
-- Tailscale installed and connected to the same tailnet
-- Git, Python 3.10+, Node.js 18+
+- Ubuntu 22.04+ LTS, 4+ GB RAM (8 GB for CB)
+- Docker Engine ≥ 26, Compose v2 (`docker compose` — never `docker-compose`)
+- Tailscale installed and joined to the same tailnet
+- Git, Python 3.10+, Node.js 18+, `jq`
 
-**Central Bank VM only:**
-- At least 8 GB RAM (Fabric peer + orderer + 2 FSC nodes + token chaincode + CA + backend)
-
-**Bank VMs:**
-- At least 4 GB RAM
-
-### Clone the repo (all VMs)
-
+**Clone the repo (all VMs):**
 ```bash
-git clone https://github.com/<org>/sworna-cbdc.git
+git clone https://github.com/sapienskid/sworna-cbdc.git
 cd sworna-cbdc
 ```
 
@@ -105,38 +106,47 @@ cd sworna-cbdc
 | Node | Tailscale IP | Role |
 |------|-------------|------|
 | `centralcbdc` | `100.72.112.29` | Central Bank — orderer, peer, token engine, backend |
-| `bankpt` (Bank 1) | `100.111.120.73` | Commercial Bank A — peer, owner FSC, backend |
-| `bankpp` (Bank 2) | `100.71.149.60` | Commercial Bank B — peer, owner FSC, backend |
+| `bankpt` (Bank 001) | `100.111.120.73` | Commercial Bank A — peer, owner FSC, backend |
+| `bankpp` (Bank 002) | `100.71.149.60` | Commercial Bank B — peer, owner FSC, backend |
 
 ### /etc/hosts (Central Bank VM)
 
 ```
-127.0.0.1 orderer.sworna.example.com peer0.centralbank.sworna.example.com
-127.0.0.1 auditor.sworna.example.com issuer.sworna.example.com
+127.0.0.1  localhost
+127.0.0.1  orderer.sworna.example.com
+127.0.0.1  peer0.centralbank.sworna.example.com
+127.0.0.1  auditor.sworna.example.com
+127.0.0.1  issuer.sworna.example.com
+127.0.0.1  ca.centralbank.sworna.example.com
 
-# Commercial Banks (update IPs as banks join)
-100.111.120.73 peer0.bank1.sworna.example.com owner1.sworna.example.com
-100.71.149.60  peer0.bank2.sworna.example.com owner2.sworna.example.com
+100.111.120.73  peer0.bank1.sworna.example.com  owner1.sworna.example.com
+100.71.149.60   peer0.bank2.sworna.example.com  owner2.sworna.example.com
 ```
 
-### /etc/hosts (Bank A VM)
+### /etc/hosts (Bank A VM — `bankpt`)
 
 ```
-127.0.0.1 peer0.bank1.sworna.example.com owner1.sworna.example.com
+127.0.0.1  localhost
+127.0.0.1  peer0.bank1.sworna.example.com  owner1.sworna.example.com
 
-100.72.112.29 orderer.sworna.example.com peer0.centralbank.sworna.example.com
-100.72.112.29 auditor.sworna.example.com issuer.sworna.example.com
-100.71.149.60 peer0.bank2.sworna.example.com owner2.sworna.example.com
+100.72.112.29  orderer.sworna.example.com
+100.72.112.29  peer0.centralbank.sworna.example.com
+100.72.112.29  auditor.sworna.example.com
+100.72.112.29  issuer.sworna.example.com
+100.71.149.60  peer0.bank2.sworna.example.com  owner2.sworna.example.com
 ```
 
-### /etc/hosts (Bank B VM)
+### /etc/hosts (Bank B VM — `bankpp`)
 
 ```
-127.0.0.1 peer0.bank2.sworna.example.com owner2.sworna.example.com
+127.0.0.1  localhost
+127.0.0.1  peer0.bank2.sworna.example.com  owner2.sworna.example.com
 
-100.72.112.29 orderer.sworna.example.com peer0.centralbank.sworna.example.com
-100.72.112.29 auditor.sworna.example.com issuer.sworna.example.com
-100.111.120.73 peer0.bank1.sworna.example.com owner1.sworna.example.com
+100.72.112.29  orderer.sworna.example.com
+100.72.112.29  peer0.centralbank.sworna.example.com
+100.72.112.29  auditor.sworna.example.com
+100.72.112.29  issuer.sworna.example.com
+100.111.120.73  peer0.bank1.sworna.example.com  owner1.sworna.example.com
 ```
 
 ---
@@ -150,20 +160,16 @@ cd ~/sworna-cbdc
 ./scripts/deploy-centralbank.sh --provision
 ```
 
-This performs:
-1. Starts Fabric network (orderer + CB peer + settlement channel)
-2. Installs and approves token chaincode (CCAAS)
-3. Starts token CA, enrolls issuer + auditor identities
-4. Starts Issuer FSC + Auditor FSC (Docker Compose)
-5. Starts backend API + CB portal
+This starts: orderer, CB peer, settlement channel, token CA, Issuer FSC, Auditor FSC, backend API, CB portal.
 
-### After Banks Are Onboarded
+### After All Banks Are Onboarded
 
 ```bash
-./scripts/commit-chaincode.sh   # commit with all bank endorsements
+# Commit chaincode with all bank MSPs in the endorsement policy
+./scripts/commit-chaincode.sh
 ```
 
-### Update CB network overrides (when a bank is added)
+### Refresh CB Network Overrides (After Each New Bank)
 
 ```bash
 SWORNA_OWNERS="owner1 owner2" \
@@ -171,43 +177,69 @@ SWORNA_OWNERS="owner1 owner2" \
   SWORNA_OWNER_OWNER2_HOST=100.71.149.60 \
   python3 scripts/gen-net-overrides.py cb token-services/docker-compose.net.yaml
 
-docker compose -f token-services/docker-compose.yaml \
-               -f token-services/docker-compose.net.yaml \
-               up -d --force-recreate auditor issuer
+cd token-services
+docker compose -f docker-compose.yaml -f docker-compose.net.yaml \
+  up -d --force-recreate --no-deps issuer auditor
 ```
 
 ---
 
 ## 5. Onboarding a Commercial Bank
 
-Run **on the CB VM** after the bank sends its `bankN-org.json`:
+**Deploy order is critical:**
+
+```
+CB: deploy-centralbank.sh
+       ↓
+Bank: deploy-bank.sh <CODE>          ← generates bank-org.json
+       ↓
+CB: onboard-bank.sh BankNMSP <org.json>
+       ↓                              ← needs ALL existing bank signatures
+Bank: deploy-bank.sh <CODE>  (re-run) ← joins channel, installs CC, starts owner
+       ↓
+CB: commit-chaincode.sh              ← includes new bank in endorsement policy
+```
+
+### Run on CB After Receiving Bank's `bankN-org.json`
 
 ```bash
 cd ~/sworna-cbdc
-./scripts/onboard-bank.sh Bank1MSP network/bank1-org.json
-# or for Bank 2:
-./scripts/onboard-bank.sh Bank2MSP network/bank2-org.json
+
+# Set ALL owner host vars before running
+SWORNA_OWNERS="owner1 owner2" \
+  SWORNA_OWNER_OWNER1_HOST=100.111.120.73 \
+  SWORNA_OWNER_OWNER2_HOST=100.71.149.60 \
+  ./scripts/onboard-bank.sh Bank2MSP network/bank2-org.json
 ```
 
-Then export bundles for the bank:
+> **Multi-org signing:** When there are already banks on the channel, `onboard-bank.sh` automatically collects co-signatures from existing bank peers via SSH before submitting to the orderer (Fabric Application/Admins = majority required).
+
+### Export Join Bundles to Banks
 
 ```bash
 ./scripts/export-join-bundles.sh
-# delivers dist-bank-bundles/bank001.tar.gz, dist-bank-bundles/bank002.tar.gz
+# Produces: dist-bank-bundles/bank001.tar.gz, bank002.tar.gz, ...
+
 scp dist-bank-bundles/bank002.tar.gz bankpp@100.71.149.60:~/sworna-cbdc/
+```
+
+### After All Banks Joined — Commit Chaincode
+
+```bash
+./scripts/commit-chaincode.sh
+# Commits with OR('CentralBankMSP.peer','Bank1MSP.peer','Bank2MSP.peer')
 ```
 
 ---
 
 ## 6. Deploying a Commercial Bank
 
-Run **on the Bank VM** after receiving the join bundle from the CB:
+Run on the Bank VM after receiving the join bundle from CB:
 
 ```bash
 cd ~/sworna-cbdc
-tar -xzf bank002.tar.gz   # extract issuer keys + wallet pool
+tar xzf bank002.tar.gz   # extract Idemix wallet keys
 
-# Set environment
 export SWORNA_CB_HOST=100.72.112.29
 export SWORNA_OWNERS="owner1 owner2"
 export SWORNA_OWNER_OWNER1_HOST=100.111.120.73
@@ -216,161 +248,153 @@ export SWORNA_OWNER_OWNER2_HOST=100.71.149.60
 ./scripts/deploy-bank.sh 002
 ```
 
-This performs:
-1. Starts bank CA
-2. Enrolls bank Fabric org identities (peer, admin, user1)
-3. Exports `bank2-org.json` → send to CB for onboarding
-4. Bank peer joins `settlement` channel
-5. Installs and approves token chaincode (CCAAS)
-6. Starts Owner FSC node (owner2)
-7. Starts backend API + bank portal
+This performs in order:
+1. Start bank CA
+2. Enroll bank Fabric org identities (peer, admin, User1) — idempotent on re-run
+3. Export `bank2-org.json` → send to CB for onboarding
+4. Join `settlement` channel + fetch genesis block
+5. Install + approve token chaincode (CCAAS)
+6. Start Owner FSC node (owner2) in Docker
+7. Start backend API + bank portal (Vite dev server)
 
-### Deploy Order (Critical)
-
-```
-CB deploy-centralbank.sh
-    ↓
-Bank: deploy-bank.sh <CODE>  (generates bank-org.json)
-    ↓
-CB: onboard-bank.sh BankNMSP bank-org.json  (adds bank to channel)
-    ↓
-Bank: deploy-bank.sh <CODE>  (re-run to join channel + install CC)
-    ↓
-CB: commit-chaincode.sh  (after all banks are onboarded)
-```
-
-### Seed the Bank Backend DB
+### Start Bank Backend
 
 ```bash
 cd ~/sworna-cbdc/backend
-PYTHONPATH=. .venv/bin/python3 -c "
-from app.seed import seed_bank_db
-seed_bank_db(bank_code='002', bank_name='bankpp', owner_node='owner2')
-"
+nohup .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+  > /tmp/sworna-backend.log 2>&1 &
 ```
 
-Start the backend:
+### Owner FSC also needs a peer cert from each sibling bank
+
+If `token-services-owner-1` keeps restarting with `reading from file .../owner1/fsc/.../cert.pem failed`:
 
 ```bash
-nohup .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 \
-  --app-dir ~/sworna-cbdc/backend > /tmp/sworna-backend.log 2>&1 &
+# On Bank B — copy owner1's public cert from CB
+mkdir -p ~/sworna-cbdc/token-services/keys/owner1/fsc/msp/signcerts
+scp sapiens@100.72.112.29:~/sworna-cbdc/token-services/keys/owner1/fsc/msp/signcerts/cert.pem \
+    ~/sworna-cbdc/token-services/keys/owner1/fsc/msp/signcerts/cert.pem
+
+docker restart token-services-owner-1
 ```
 
 ---
 
 ## 7. Verification Checklist
 
-### ✅ CB Verified Working
+### ✅ CB Checks
 
 ```bash
-# Check all containers up
-docker ps | grep -E 'orderer|peer0\.(centralbank|bank)|auditor|issuer|ca_token'
+# All containers up
+docker ps --format '{{.Names}}\t{{.Status}}'
+# Expected: orderer, peer0.centralbank, ca_token_network, token-services-{issuer,auditor}-1
 
-# Check chaincode committed
-FABRIC_CFG_PATH=~/sworna-cbdc/config \
-CORE_PEER_TLS_ENABLED=true \
-CORE_PEER_LOCALMSPID=CentralBankMSP \
-CORE_PEER_ADDRESS=localhost:7051 \
-CORE_PEER_TLS_ROOTCERT_FILE=~/sworna-cbdc/network/organizations/peerOrganizations/centralbank.sworna.example.com/peers/peer0.centralbank.sworna.example.com/tls/ca.crt \
-CORE_PEER_MSPCONFIGPATH=~/sworna-cbdc/network/organizations/peerOrganizations/centralbank.sworna.example.com/users/Admin@centralbank.sworna.example.com/msp \
-~/sworna-cbdc/bin/peer lifecycle chaincode querycommitted -C settlement -n tokenchaincode
+# Chaincode committed with all banks
+cd ~/sworna-cbdc
+export PATH=$PATH:~/sworna-cbdc/bin
+export FABRIC_CFG_PATH=~/sworna-cbdc/config
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID=CentralBankMSP
+export CORE_PEER_ADDRESS=localhost:7051
+export CORE_PEER_MSPCONFIGPATH=~/sworna-cbdc/network/organizations/peerOrganizations/centralbank.sworna.example.com/users/Admin@centralbank.sworna.example.com/msp
+export CORE_PEER_TLS_ROOTCERT_FILE=~/sworna-cbdc/network/organizations/peerOrganizations/centralbank.sworna.example.com/peers/peer0.centralbank.sworna.example.com/tls/ca.crt
+peer lifecycle chaincode querycommitted -C settlement -n tokenchaincode
 # Expected: Version: 1, Sequence: N, Approvals: [Bank1MSP: true, Bank2MSP: true, CentralBankMSP: true]
 
-# Check issuer FSC health
-curl -sf http://localhost:9100/healthz && echo OK
+# FSC health
+curl -sf http://localhost:9100/healthz && echo "Issuer OK"
+curl -sf http://localhost:9000/healthz && echo "Auditor OK"
 
-# Check auditor FSC health
-curl -sf http://localhost:9000/healthz && echo OK
-
-# Check backend API
+# Backend
 curl http://localhost:8000/api/v1/banks
 ```
 
-### ✅ Bank Verified Working
+### ✅ Bank Checks
 
 ```bash
-# Chaincode responds on bank peer
-curl -sf http://localhost:9200/api/v1/owner/accounts/pool_001_w1
-# Expected: {"message":"got balances for pool_001_w1","payload":{"balance":[...]}}
+# Owner FSC running (not restarting)
+docker ps | grep owner
+docker logs token-services-owner-1 2>&1 | grep "FSC node is ready"
+
+# CCAAS container running
+docker ps | grep tokenchaincode_ccaas
 
 # Backend login
 curl -s -X POST http://localhost:8000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"bankadmin","password":"sworna-bank"}' | jq .token
+  -d '{"username":"bankadmin","password":"sworna-bank"}' | python3 -m json.tool
 ```
 
-### ✅ End-to-End Token Transfer Test
+### ✅ End-to-End Token Transfer
 
 ```bash
-# Mint to Bank A reserve (from CB VM)
-curl -s -X POST http://localhost:8000/api/v1/admin/mint \
+# 1. CB mints SWR to Bank A reserve
+CB_TOKEN=$(curl -s -X POST http://100.72.112.29:8000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer <CB_ADMIN_TOKEN>' \
-  -d '{"bank_code":"001","amount":"10000.00","reference":"Initial allocation"}'
+  -d '{"username":"cbadmin","password":"sworna-cb"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
-# Deposit to Alice (from Bank A VM backend)
-curl -s -X POST http://localhost:8000/api/v1/bank/deposit \
+curl -s -X POST http://100.72.112.29:8000/api/v1/admin/mint \
+  -H "Authorization: Bearer $CB_TOKEN" \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer <BANK_ADMIN_TOKEN>' \
-  -d '{"account_number":"SWR-001-00000001","amount":"1500.00","reference":"Initial deposit"}'
+  -d '{"bank_code":"001","amount":"10000.00","reference":"Demo allocation"}' | python3 -m json.tool
 
-# Alice transfers to Bob
-curl -s -X POST http://localhost:8000/api/v1/payments/transfer \
+# 2. Bank A deposits to customer Alice
+BANK_TOKEN=$(curl -s -X POST http://100.111.120.73:8000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer <ALICE_TOKEN>' \
-  -d '{"from_account":"SWR-001-00000001","to_account":"SWR-001-00000002","amount":"250.00","reference":"Payment"}'
+  -d '{"username":"bankadmin","password":"sworna-bank"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+curl -s -X POST http://100.111.120.73:8000/api/v1/bank/deposit \
+  -H "Authorization: Bearer $BANK_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"account_number":"SWR-001-00000001","amount":"1500.00","reference":"Initial deposit"}' | python3 -m json.tool
+
+# 3. Alice P2P transfer to Bob
+ALICE_TOKEN=$(curl -s -X POST http://100.111.120.73:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"alice","password":"alice123"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+curl -s -X POST http://100.111.120.73:8000/api/v1/payments/transfer \
+  -H "Authorization: Bearer $ALICE_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"from_account":"SWR-001-00000001","to_account":"SWR-001-00000002","amount":"250.00","reference":"Coffee"}' | python3 -m json.tool
 ```
 
 ---
 
 ## 8. Normal Operations
 
-### Central Bank Portal
+### Central Bank Portal (`http://100.72.112.29:5173`)
 
-- URL: `http://100.72.112.29:5173`
-- Login as `cbadmin` / `sworna-admin`
-- Functions: **Mint SWR to banks**, view bank network, revoke/freeze accounts
+Login: `cbadmin` / `sworna-cb`
 
-> **CB only manages banks, not retail customers.** Issuing money goes to a bank's reserve wallet only.
+| Action | API | Notes |
+|--------|-----|-------|
+| Mint SWR to bank | `POST /api/v1/admin/mint` | Goes to bank's reserve wallet only |
+| View banks | `GET /api/v1/banks` | All registered commercial banks |
+| View ledger blocks | `GET /api/v1/ledger/blocks` | Settlement channel blocks |
 
-### Bank Portal
+### Bank Portal (`http://<BANK_IP>:5173`)
 
-- URL: `http://<BANK_IP>:5173`
-- Login as `bankadmin` / `sworna-bank`
-- Functions: Create customer accounts, deposit, withdraw, view transactions
+Login: `bankadmin` / `sworna-bank`
 
-### Customer Access
+| Action | API | Notes |
+|--------|-----|-------|
+| Create customer account | `POST /api/v1/accounts` | Assigns wallet from pool |
+| Deposit to customer | `POST /api/v1/bank/deposit` | Moves from reserve to customer wallet |
+| View reserve balance | `GET /api/v1/bank/reserve` | Bank's own SWR holding |
+| View all accounts | `GET /api/v1/accounts` | All customers at this bank |
 
-- Login with `username` / `password` created by bank admin
-- Functions: View balance, transfer to other accounts (intra/inter-bank)
+### Customer Access (`http://<BANK_IP>:5173/login`)
 
-### Mint New SWR (CB Admin Only)
-
-```bash
-POST /api/v1/admin/mint
-{
-  "bank_code": "001",
-  "amount": "50000.00",
-  "reference": "Q4 liquidity injection"
-}
-```
-
-### Create Customer Account (Bank Admin Only)
-
-```bash
-POST /api/v1/accounts
-{
-  "full_name": "Jane Doe",
-  "username": "jane",
-  "password": "secure123",
-  "kyc_level": 3,
-  "transfer_limit": 10000.00
-}
-```
+| Action | API | Notes |
+|--------|-----|-------|
+| View balance | `GET /api/v1/accounts/{acct}` | Own wallet balance |
+| Transfer | `POST /api/v1/payments/transfer` | Intra or inter-bank |
+| View history | `GET /api/v1/payments/history` | Own transactions |
 
 ### Inter-Bank Transfer
 
-Transfers between Bank A and Bank B customers go through the token SDK automatically — the owner FSC node resolves the counterparty wallet using the `counterparty.node` field.
+Transfers between Bank A and Bank B are transparent to the customer — they just use the destination account number (e.g. `SWR-002-00000001`). The owner FSC node resolves the counterparty wallet and routes the token transfer through the auditor.
 
 ---
 
@@ -378,22 +402,24 @@ Transfers between Bank A and Bank B customers go through the token SDK automatic
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `failed obtaining auditor signature: timeout reached` | Owner FSC can't reach Auditor's P2P port (9001) | Check `extra_hosts` in `docker-compose.bank.net.yaml`; verify `100.72.112.29:9001` is reachable |
-| `chaincode registration failed: timeout expired` | `peer0bankN_tokenchaincode_ccaas` container has wrong CHAINCODE_ID | Re-run `docker rm -f peer0bank1_tokenchaincode_ccaas` then recreate with the exact package ID from `peer lifecycle chaincode queryinstalled` |
-| `currently defined sequence N is larger than requested sequence 1` | Trying to approve with wrong sequence number | Query `peer lifecycle chaincode querycommitted -C settlement -n tokenchaincode` to get current sequence, then approve with `--sequence N` |
-| `Identity X is already registered` | `registerEnroll-bank.sh` run twice on same CA | Safe to ignore — register calls now have `|| true` (idempotent) |
-| `communication service not ready` | FSC node bootstrapping (takes ~20s) | Wait and retry the request. Do NOT restart. |
-| Backend returns `insufficient role` on transfer | Customer accounts need `customer` role in `payments/transfer` | Already fixed — `deps.customer` used in transfer endpoint |
-| `no free wallets` | Wallet pool exhausted for a bank | Increase `POOL_SIZE` and redeploy the owner FSC node |
-| `account not found` | Wrong account number or bank mismatch | Verify account exists at `GET /api/v1/accounts/{account_number}` |
-| CB portal shows accounts, not banks | Legacy `to_account` endpoint used | Use `bank_code` field in mint request |
-| Bank B deploy fails with path errors | `ORG_DIR` was relative in `registerEnroll-bank.sh` | Fixed — now uses `${PWD}/...` absolute path |
-| Tailscale IP mismatch | Bank VM's Tailscale IP changed | Run `tailscale status` on CB to get current IPs; update `/etc/hosts` on all VMs |
+| `failed obtaining auditor signature: timeout reached` | Owner FSC can't reach Auditor P2P port 9001 | Check `extra_hosts` in `docker-compose.bank.net.yaml`; verify `100.72.112.29:9001` is reachable from bank VM |
+| `peer will not accept external chaincode connection` | CCAAS container has wrong `CHAINCODE_ID` | Get exact ID via `peer lifecycle chaincode queryinstalled`, restart CCAAS container with matching ID |
+| `currently defined sequence N is larger than requested sequence 1` | Approving with wrong sequence number | Query committed sequence first: `peer lifecycle chaincode querycommitted -C settlement -n tokenchaincode` |
+| `Identity X is already registered` | Re-running `registerEnroll-bank.sh` on same CA | Safe to ignore — `register` calls are now idempotent (`|| true`) |
+| `communication service not ready` | FSC node bootstrapping (~20s) | **Do NOT restart.** Wait and retry. |
+| `reading from file /var/fsc/keys/owner1/fsc/msp/signcerts/cert.pem failed` | Bank B missing sibling owner's public cert | Copy cert from CB: `scp sapiens@CB_IP:~/sworna-cbdc/token-services/keys/owner1/fsc/msp/signcerts/cert.pem ~/sworna-cbdc/token-services/keys/owner1/fsc/msp/signcerts/cert.pem` |
+| `User1bankN.sworna.example.com/msp ... no such directory` | `@` missing in `core.yaml` path | `sed -i 's\|User1bank2\.sworna\.example\.com\|User1@bank2.sworna.example.com\|g' token-services/owner/conf/owner2/core.yaml` then restart owner |
+| `policy for /Channel/Application not satisfied: 1 sub-policies satisfied, requires 2` | Channel update needs co-signatures from existing bank admins | `onboard-bank.sh` now auto-collects SSH co-signatures; ensure `SWORNA_OWNER_OWNER1_HOST` is set |
+| `insufficient role` on transfer | Customer calling bank-staff-only endpoint | Fixed — `payments/transfer` now uses `deps.customer` role |
+| `no free wallets` | Wallet pool exhausted | Increase `POOL_SIZE` env var and re-deploy owner FSC |
+| `account not found` | Wrong account number or cross-bank mismatch | Verify with `GET /api/v1/accounts/{account_number}` |
+| Blank `/etc/hosts` | Docker networking broken | Always keep `127.0.0.1 localhost` at top of `/etc/hosts` |
+| OOM during build | Low RAM | Use `--no-cache` and build one service at a time |
 
 ### Log Locations
 
-| Service | Log |
-|---------|-----|
+| Service | Log Location |
+|---------|-------------|
 | Backend (all VMs) | `/tmp/sworna-backend.log` |
 | Portal (all VMs) | `/tmp/sworna-web.log` |
 | Owner FSC | `docker logs token-services-owner-1` |
@@ -405,64 +431,42 @@ Transfers between Bank A and Bank B customers go through the token SDK automatic
 ### Key Debug Commands
 
 ```bash
-# Check owner FSC balances
+# Check owner FSC balance for a wallet
 curl http://owner1.sworna.example.com:9200/api/v1/owner/accounts/pool_001_w1
 
-# Check auditor logs for transaction status
-docker logs token-services-auditor-1 2>&1 | strings | grep -E 'valid|committed|failed' | tail -20
+# Check if Bank2MSP is in the channel
+peer lifecycle chaincode querycommitted -C settlement -n tokenchaincode 2>&1 | grep Approv
 
-# Check owner logs for transfer errors
-docker logs token-services-owner-1 2>&1 | strings | grep -v DEBU | tail -30
+# Verify CCAAS package ID matches committed
+docker inspect peer0bank2_tokenchaincode_ccaas | python3 -c \
+  "import sys,json; env=[e for e in json.load(sys.stdin)[0]['Config']['Env'] if 'CHAINCODE_ID' in e]; print(env)"
 
-# Verify chaincode is running on bank peer
-docker inspect peer0bank1_tokenchaincode_ccaas | jq '.[0].Config.Env'
-# CHAINCODE_ID must exactly match `peer lifecycle chaincode queryinstalled` output
-
-# Network overrides inside owner container
+# Check cross-VM DNS from inside owner container
 docker exec token-services-owner-1 cat /etc/hosts
-```
-
-### CCAAS Container Package ID Mismatch (Most Common Issue)
-
-When Bank A/B deploys chaincode, the CCAAS container must be started with the exact `CHAINCODE_ID` that matches what's installed on the peer:
-
-```bash
-# 1. Get the actual package ID
-PEER_ENV docker exec peer0.bank1.sworna.example.com peer lifecycle chaincode queryinstalled
-
-# 2. Stop old container
-docker rm -f peer0bank1_tokenchaincode_ccaas
-
-# 3. Start with exact ID
-docker run --restart always -d --name peer0bank1_tokenchaincode_ccaas \
-  --network fabric_test \
-  -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999 \
-  -e CHAINCODE_ID=tokenchaincode_1:<EXACT_HASH> \
-  -e CORE_CHAINCODE_ID_NAME=tokenchaincode_1:<EXACT_HASH> \
-  tokenchaincode_ccaas_image:latest
+docker exec token-services-owner-1 nc -zv auditor.sworna.example.com 9001 && echo "Auditor reachable"
 ```
 
 ---
 
-## Appendix: Port Reference
+## 10. Port Reference
 
-| Service | Port | Protocol | Notes |
-|---------|------|----------|-------|
-| Fabric Orderer | 7050 | gRPC/TLS | CB VM only |
-| Fabric Peer CB | 7051 | gRPC/TLS | CB VM only |
-| Fabric Peer B1 | 9051 | gRPC/TLS | Bank A VM |
-| Fabric Peer B2 | 11051 | gRPC/TLS | Bank B VM |
-| Issuer FSC HTTP | 9100 | HTTP | CB VM |
-| Issuer FSC P2P | 9101 | libp2p | CB VM |
-| Auditor FSC HTTP | 9000 | HTTP | CB VM |
-| Auditor FSC P2P | 9001 | libp2p | CB VM |
-| Owner1 FSC HTTP | 9200 | HTTP | Bank A VM |
-| Owner1 FSC P2P | 9201 | libp2p | Bank A VM |
-| Owner2 FSC HTTP | 9300 | HTTP | Bank B VM |
-| Owner2 FSC P2P | 9301 | libp2p | Bank B VM |
-| Backend API | 8000 | HTTP | All VMs |
-| Web Portal | 5173 | HTTP | All VMs |
-| Token CA | 27054 | HTTPS | CB VM |
-| Fabric CA (CB) | 7054 | HTTPS | CB VM |
-| Fabric CA (B1) | 8054 | HTTPS | Bank A VM |
-| Fabric CA (B2) | 9054 | HTTPS | Bank B VM |
+| Service | Port | Protocol | VM |
+|---------|------|----------|----|
+| Fabric Orderer | 7050 | gRPC/TLS | CB |
+| Fabric Peer CB | 7051 | gRPC/TLS | CB |
+| Fabric Peer B1 | 9051 | gRPC/TLS | Bank A |
+| Fabric Peer B2 | 11051 | gRPC/TLS | Bank B |
+| Issuer FSC HTTP | 9100 | HTTP | CB |
+| Issuer FSC P2P | 9101 | libp2p | CB |
+| Auditor FSC HTTP | 9000 | HTTP | CB |
+| Auditor FSC P2P | 9001 | libp2p | CB |
+| Owner1 FSC HTTP | 9200 | HTTP | Bank A |
+| Owner1 FSC P2P | 9201 | libp2p | Bank A |
+| Owner2 FSC HTTP | 9300 | HTTP | Bank B |
+| Owner2 FSC P2P | 9301 | libp2p | Bank B |
+| Backend API | 8000 | HTTP | All |
+| Web Portal | 5173 | HTTP | All |
+| Token CA | 27054 | HTTPS | CB |
+| Fabric CA (CB) | 7054 | HTTPS | CB |
+| Fabric CA (B1) | 8054 | HTTPS | Bank A |
+| Fabric CA (B2) | 9054 | HTTPS | Bank B |
