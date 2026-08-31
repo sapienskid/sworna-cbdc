@@ -24,8 +24,8 @@ export FABRIC_CFG_PATH="$ROOT/config"
 MODE="${1:-up}"
 CHANNEL=settlement
 CC_NAME=tokenchaincode
-CC_VERSION=1
-CC_SEQUENCE=1
+CC_VERSION="${CC_VERSION:-1}"
+CC_SEQUENCE="${CC_SEQUENCE:-1}"
 CCAAS_SERVER_PORT=9999
 
 BANK_CODE="${BANK_CODE:?BANK_CODE (e.g. 001) must be set}"
