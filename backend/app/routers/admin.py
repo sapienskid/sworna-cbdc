@@ -276,15 +276,28 @@ async def overview(user: User = Depends(cb_admin), session: Session = Depends(ge
     rows: list[CirculationRow] = []
     total_minor = 0
     for bank in banks:
-        accounts = session.scalars(select(Account).where(Account.bank_id == bank.id)).all()
         bank_minor = 0
+        
+        # 1. Master Reserve Vault (pool_{code}_w1)
+        reserve_wallet = f"pool_{bank.code}_w1"
+        try:
+            bank_minor += await token_client.balances(
+                wallet=reserve_wallet, node=bank.owner_node
+            )
+        except (TokenServiceError, httpx.HTTPError):
+            pass
+
+        # 2. Retail Customer Wallets
+        accounts = session.scalars(select(Account).where(Account.bank_id == bank.id)).all()
         for account in accounts:
+            if account.wallet == reserve_wallet:
+                continue
             try:
                 bank_minor += await token_client.balances(
                     wallet=account.wallet, node=bank.owner_node
                 )
             except (TokenServiceError, httpx.HTTPError):
-                continue  # owner VM unreachable — report what we can
+                continue
         total_minor += bank_minor
         rows.append(
             CirculationRow(
