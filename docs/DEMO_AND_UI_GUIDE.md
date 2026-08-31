@@ -55,11 +55,16 @@ When logged in as `cbadmin`, the **"All banks on the network"** table displays t
 | **MSP** | **Membership Service Provider ID** in Hyperledger Fabric (`Bank1MSP`, `Bank2MSP`). Identifies the organization's cryptographic root of trust on the consortium ledger. |
 | **Owner node** | The **Fabric Smart Client (FSC)** node name (`owner1`, `owner2`) running inside the bank's VM. The owner node manages the bank's UTXOs and executes peer-to-peer transfers with counterparty banks. |
 | **Status** | `active` indicates the bank is healthy and permitted to transact. The CB can toggle this to `suspended` to freeze an institution during regulatory actions. |
-| **Pool** | **Pre-Provisioned Idemix Token Wallets** (e.g. `10 wallets`). Pre-minting zero-knowledge cryptographic keys ensures instant account opening without waiting for on-chain credential issuance. |
-| **Joined** | Date and time when the commercial bank was admitted to the `settlement` channel. |
+| **Joined** | Exact date when the commercial bank was admitted to the `settlement` channel. |
 | **Actions** | Central Bank governance controls to modify interbank limits, redemption privileges, or status. |
 
----
+### Why Pre-Provisioned Token Pools Exist (The 10 Wallets)
+In Zero-Knowledge CBDC architectures using **Idemix**, generating a user wallet requires a cryptographic credential issued by the Central Bank Token CA. 
+- **The Problem:** If a bank had to request a new cryptographic signature from the Central Bank CA every time a retail citizen walked in to open an account, the Central Bank would become a single point of failure and bottleneck.
+- **The Solution:** During bank onboarding, the Central Bank CA pre-provisions an **Idemix Key Pool** (e.g., 10, 50, 100 wallets) to the commercial bank.
+  - `pool_00k_w1`: Reserved as the Bank's Master Reserve Vault.
+  - `pool_00k_w2..wN`: Allocated instantly to retail customers as they onboard without any network lag or CA dependency.
+- **UI Simplification:** The internal pool count is an underlying cryptographic detail and has been streamlined from the Central Bank governance table.
 
 ## 3. Cryptographic Signatures Explained
 

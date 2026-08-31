@@ -79,7 +79,6 @@ export function CBBanks() {
               <TableHead>MSP</TableHead>
               <TableHead>Owner node</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Pool</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -105,7 +104,6 @@ export function CBBanks() {
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell className="text-xs">{b.pool_size} wallets</TableCell>
                 <TableCell className="text-xs">{b.joined_at ? new Date(b.joined_at.includes("T") ? b.joined_at : b.joined_at.replace(" ", "T") + "Z").toLocaleDateString() : "—"}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
@@ -121,7 +119,7 @@ export function CBBanks() {
             ))}
             {!banks.length && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                   No banks yet.
                 </TableCell>
               </TableRow>
