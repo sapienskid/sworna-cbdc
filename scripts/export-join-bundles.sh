@@ -39,6 +39,8 @@ for row in $(echo "$BANKS" | jq -r '.[] | @base64'); do
   log_info "packing bank $code ($owner) -> $tarfile"
   tar -czf "$tarfile" -C "$ROOT" \
     "token-services/keys/$owner" \
+    token-services/keys/auditor/fsc/msp/signcerts/cert.pem \
+    token-services/keys/issuer/fsc/msp/signcerts/cert.pem \
     network/organizations/ordererOrganizations/sworna.example.com/orderers/orderer.sworna.example.com/tls/ca.crt \
     network/organizations/ordererOrganizations/sworna.example.com/tlsca/tlsca.sworna.example.com-cert.pem
 done
