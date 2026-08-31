@@ -45,7 +45,7 @@ committed_seq=$(peer lifecycle chaincode querycommitted --channelID "$CHANNEL" -
   --output json 2>/dev/null | jq -r '.sequence // .chaincode_definitions[0].sequence // empty' || true)
 if [ -n "$committed_seq" ]; then
   CC_SEQUENCE=$((committed_seq + 1))
-  CC_VERSION="$CC_SEQUENCE"
+  CC_VERSION=1
   echo "chaincode is committed at sequence ${committed_seq}; upgrading to ${CC_SEQUENCE}"
 else
   CC_SEQUENCE=1
