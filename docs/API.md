@@ -54,14 +54,25 @@ Account numbers: `SWR-<bank code>-<8 digits>` (e.g. `SWR-001-00000001`).
 Enforced before proxying: sender `active`, recipient not `frozen`, account
 transfer limit, bank interbank/redeem limits.
 
+### Commercial Bank Reserve Operations (bank_admin)
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/bank/reserve` | Get bank Master Reserve Vault balance (`pool_00k_w1`) |
+| POST | `/bank/deposit` | Disburse SWR from Master Reserve Vault to customer wallet |
+| POST | `/bank/withdraw` | Withdraw SWR from customer wallet back to Master Reserve Vault |
+
 ### Admin (cb_admin)
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/admin/issue` | `{to_account, amount, reference}` |
-| POST | `/admin/banks/{code}/provision` | **generate the bank's wallet-pool keys** via the token CA |
-| GET | `/admin/overview` | total supply + per-bank circulation + account counts |
-| GET | `/admin/transactions` | recent transaction log |
-| GET | `/admin/ledger` | channel height + recent blocks (peer CLI + configtxlator) |
+| POST | `/admin/mint` | Mint wholesale SWR to a bank Master Reserve Vault: `{bank_code, amount, reference}` |
+| POST | `/admin/allocate` | Transfer wholesale SWR between bank reserve vaults: `{from_bank_code, to_bank_code, amount, reference}` |
+| POST | `/admin/burn` | Redeem/retire wholesale SWR from a bank reserve vault: `{bank_code, amount, reference}` |
+| POST | `/admin/banks/{code}/provision` | Generate the bank's wallet-pool keys via Token CA |
+| GET | `/admin/overview` | Total supply + live per-bank reserve and circulation totals |
+| GET | `/admin/transactions` | Recent transaction log across the network |
+| GET | `/admin/ledger` | Settlement channel height + live blocks from peer |
+| GET | `/admin/users` | List Central Bank staff users |
+| POST | `/admin/users` | Create Central Bank staff user (`cb_admin`, `cb_mint_officer`, `cb_auditor`) |
 
 ---
 

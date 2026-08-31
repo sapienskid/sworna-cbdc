@@ -12,7 +12,14 @@ A two-tier Central Bank Digital Currency (CBDC) platform built on Hyperledger Fa
 
 ## Quick Start
 
-See **[docs/SETUP.md](docs/SETUP.md)** for the full setup guide.
+- **[docs/DEMO_AND_UI_GUIDE.md](docs/DEMO_AND_UI_GUIDE.md)**: Browser portal URLs, login credentials, UI field definitions, and step-by-step presentation script.
+- **[docs/SETUP.md](docs/SETUP.md)**: Authoritative operational setup runbook, multi-org onboarding, and troubleshooting.
+
+### Web Portals
+
+- **Central Bank Console:** `http://100.72.112.29:8000` (or `:5173`) — `cbadmin` / `sworna-cb`
+- **Bank A Portal:** `http://100.111.120.73:8000` — `bankadmin` / `sworna-bank`
+- **Bank B Portal:** `http://100.71.149.60:8000` — `bankadmin` / `sworna-bank`
 
 ### Deploy Order
 

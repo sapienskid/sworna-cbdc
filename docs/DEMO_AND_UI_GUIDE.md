@@ -22,7 +22,7 @@
 
 All web portals are accessible directly via your web browser on **Port 8000** (or Port 5173).
 
-### 🌐 Direct Browser Portals
+### Direct Browser Portals
 
 | Node | Browser URL | Default Role / View |
 |---|---|---|
@@ -32,7 +32,7 @@ All web portals are accessible directly via your web browser on **Port 8000** (o
 
 ---
 
-### 🔑 Complete Login Credentials
+### Complete Login Credentials
 
 | Institution / Account | Username | Password | Role | Account Number | Initial Demo Balance |
 |---|---|---|---|---|---|
