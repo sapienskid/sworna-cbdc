@@ -41,12 +41,12 @@ policy="$policy)"
 echo "endorsement policy: $policy"
 
 # Determine the next sequence + version from the committed definition.
-committed=$(peer lifecycle chaincode querycommitted --channelID "$CHANNEL" --name "$CC_NAME" \
-  --output json 2>/dev/null | jq -r '.chaincode_definitions[0] // empty' || true)
-if [ -n "$committed" ]; then
-  CC_SEQUENCE=$(($(echo "$committed" | jq -r '.sequence') + 1))
-  CC_VERSION=$(echo "$committed" | jq -r '.version')
-  echo "chaincode is committed at sequence $((CC_SEQUENCE - 1)); upgrading to $CC_SEQUENCE"
+committed_seq=$(peer lifecycle chaincode querycommitted --channelID "$CHANNEL" --name "$CC_NAME" \
+  --output json 2>/dev/null | jq -r '.sequence // .chaincode_definitions[0].sequence // empty' || true)
+if [ -n "$committed_seq" ]; then
+  CC_SEQUENCE=$((committed_seq + 1))
+  CC_VERSION="$CC_SEQUENCE"
+  echo "chaincode is committed at sequence ${committed_seq}; upgrading to ${CC_SEQUENCE}"
 else
   CC_SEQUENCE=1
   CC_VERSION=1
