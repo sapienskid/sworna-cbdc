@@ -65,8 +65,9 @@ for w in demo:
 if bank_code:
     for i in range(1, pool_size + 1):
         wid = "pool_%s_w%d" % (bank_code, i)
+        is_default = "\n            default: true" if i == 1 else ""
         wallets.append(
-            "          - id: %s\n            path: /var/fsc/keys/%s/wallet/%s/msp" % (wid, owner_node, wid)
+            "          - id: %s%s\n            path: /var/fsc/keys/%s/wallet/%s/msp" % (wid, is_default, owner_node, wid)
         )
 
 with open(sys.argv[1]) as f:
