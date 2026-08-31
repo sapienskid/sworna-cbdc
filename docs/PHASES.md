@@ -4,11 +4,11 @@ This document is the master roadmap. Each phase has a goal, a task list, exit cr
 
 | Phase | Name | Duration | Status |
 |---|---|---|---|
-| 1 | Documentation & research foundation | now | **In progress** |
-| 2 | Prototype foundation & de-risking | ~2–3 days | Planned |
-| 3 | Initial prototype demo | 2 weeks | Planned |
-| 4 | Comprehensive banking system | 1–3 months | Planned |
-| 5 | Performance, security & hardening | continuous | Planned |
+| 1 | Documentation & research foundation | Completed | **Complete** |
+| 2 | Prototype foundation & de-risking | Completed | **Complete (Verified)** |
+| 3 | Initial prototype demo (Distributed N-Bank) | Completed | **Complete (Functional)** |
+| 4 | Comprehensive banking system | 6–8 weeks (1.5–2 mo) | Planned (Detailed WBS below) |
+| 5 | Performance, security & hardening | 2–4 weeks | Planned |
 | 6 | Future vision / production path | ongoing | Vision |
 
 ---
@@ -141,6 +141,19 @@ QR and merchant payments, request money, top-up/cash-out, statements, notificati
 | Backups & DR | Ledger snapshots / join-from-snapshot; CouchDB backups; runbook. |
 | Key & cert management | Per-org Fabric CA operations; certificate rotation; idemix wallet lifecycle. |
 | Chaincode upgrades | Documented process + scripts for token-chaincode version upgrades. |
+
+### 4.6 Phase 4 Work Breakdown Structure & Effort Estimation
+
+Estimated team basis: **1 Senior Blockchain / Go Engineer + 1 Fullstack Python/React Engineer**.
+
+| Subsystem | Scope & Key Deliverables | Complexity | Estimated Effort |
+|---|---|---|---|
+| **4.1 Architecture & Consensus** | • Upgrade ordering service from Raft to **SmartBFT** (4+ orderers with `ConsenterMapping`).<br>• Split single channel into **Multi-Channel** topology (`settlement`, `retail`, `registry`).<br>• Introduce **Private Data Collections (PDC)** for customer KYC data hashing. | **High** | **2–3 Weeks** |
+| **4.2 Compliance & Risk Engine** | • Enforce transaction rules & travel rule at the **Go Smart Client Auditor layer**.<br>• Automated sanctions screening against configurable watchlist APIs.<br>• On-chain token freeze / legal hold enforcement in FSC owner flows. | **Medium-High** | **2 Weeks** |
+| **4.3 Monetary Policy & Settlement** | • Interbank reserve tracking & wholesale RTGS-style liquidity pools.<br>• Automated interest accrual engine (ADR-0011).<br>• Programmable escrow and conditional swaps (HTLC primitives). | **Medium** | **1–2 Weeks** |
+| **4.4 Wallet & Retail UX** | • QR-code payments (generation and scanning in React SPA).<br>• Merchant payment acceptance flows & transaction push notifications.<br>• Mock core banking top-up and cash-out integration. | **Low-Medium** | **1 Week** |
+| **4.5 Security & Ops Delivery** | • API Gateway with OAuth2/OIDC RBAC auth & rate-limiting.<br>• Automated CI/CD pipelines & ledger snapshot/join runbooks. | **Medium** | **1 Week** |
+| **Total Phase 4 Effort** | **Full Comprehensive Banking System** | **Comprehensive** | **6–8 Weeks (1.5–2 mo)** |
 
 **Phase-4 ADRs to write:** ADR-0010 (compliance at auditor layer vs chaincode), ADR-0011 (interest model), ADR-0012 (channel/data-governance design), ADR-0013 (deployment topology on the lab LAN).
 

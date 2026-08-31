@@ -63,17 +63,30 @@ check_bundle() {
   return $missing
 }
 
-bank_up() {
+bank_ca_up() {
+  export BANK_ORG BANK_MSP BANK_PEER_PORT BANK_CC_PORT BANK_CA_PORT \
+         BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
+         SWORNA_CB_HOST="${SWORNA_CB_HOST:?SWORNA_CB_HOST (CB host IP) must be set}" \
+         DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
+  mkdir -p "$NETWORK/organizations/fabric-ca/${BANK_ORG}"
+  log_info "starting ${BANK_ORG} CA container"
+  docker compose -f compose/compose-bank-peer.yaml up -d bank-ca
+
+  log_info "waiting for ${BANK_ORG} CA to accept connections"
+  for i in $(seq 1 30); do
+    if curl -sk "https://localhost:${BANK_CA_PORT}/cainfo" >/dev/null 2>&1 || curl -sf "http://localhost:${BANK_CA_PORT}/cainfo" >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+}
+
+bank_peer_up() {
   check_bundle
   export BANK_ORG BANK_MSP BANK_PEER_PORT BANK_CC_PORT BANK_CA_PORT \
          BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
          SWORNA_CB_HOST="${SWORNA_CB_HOST:?SWORNA_CB_HOST (CB host IP) must be set}" \
          DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
-  # Pre-create the CA data dir as the deploying user so Docker does not create
-  # it root-owned (which would block host-side enrollment later).
-  mkdir -p "$NETWORK/organizations/fabric-ca/${BANK_ORG}"
-  log_info "starting ${BANK_ORG} CA + peer containers"
-  docker compose -f compose/compose-bank-peer.yaml up -d
+  log_info "starting ${BANK_ORG} peer container"
+  docker compose -f compose/compose-bank-peer.yaml up -d bank-peer
 
   log_info "waiting for the ${BANK_ORG} peer to accept connections"
   local ok=0
@@ -82,6 +95,12 @@ bank_up() {
     sleep 2
   done
   [[ $ok -eq 1 ]] || { log_error "peer did not come up"; return 1; }
+}
+
+bank_up() {
+  bank_ca_up
+  enroll_org
+  bank_peer_up
 }
 
 enroll_org() {
@@ -113,8 +132,9 @@ export_org_json() {
 }
 
 identity() {
-  bank_up
+  bank_ca_up
   enroll_org
+  bank_peer_up
   render_conf
   export_org_json
   echo

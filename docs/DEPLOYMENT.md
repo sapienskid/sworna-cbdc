@@ -36,9 +36,11 @@ Customer machines   a browser only (the bank portal)
   Fabric CA** on its own VM. Only its public CA cert is shared with the CB. The
   CB never holds a bank's Fabric private keys, and a bank never holds another
   org's keys.
-- The join bundle carries only the bank's **token wallets** (minted by the CB's
-  token CA) + public orderer TLS certs — never bank Fabric keys or orderer
-  private keys.
+- **Why Join Bundles are required (`bank<CODE>.tar.gz`):**
+  The central bank controls the Token CA (the root idemix trust anchor trusted by the chaincode). Banks cannot mint their own token-spending keys. The CB exports a minimized bundle containing:
+  - `token-services/keys/<owner_node>` — the bank's FSC identity and Idemix customer wallet pool (`pool_001_w1..w10`).
+  - `orderer/tls/ca.crt` & `tlsca...pem` — public TLS root certs to communicate with the CB orderer.
+  - ❌ **Zero secrets leak:** NO bank Fabric private keys, NO Bank CA keys, and NO genesis blocks are in the bundle.
 
 ## 3. Fresh-clone gotchas (now handled)
 

@@ -14,10 +14,15 @@ This document describes the architectural design of the Sworna CBDC prototype. I
 
 ## 2. CBDC model
 
-- **Distribution: two-tier.** Tier 1: central bank ↔ commercial banks (issue, redemption, wholesale settlement). Tier 2: commercial banks ↔ customers (retail wallets). See ADR-0008.
-- **Money representation: token-based (UTXO).** Currency exists as individual spendable tokens; a transfer consumes inputs and creates outputs (change-splitting), like Bitcoin. Balances are derived from owned unspent outputs, not stored as a per-account number. See ADR-0006 [R13].
-- **Privacy: Zero-Knowledge Proofs (zkatdlog).** Each transaction carries commitments and range proofs. Anyone (e.g., the peer / token chaincode) can verify the proofs are valid; only the involved parties and the **auditor** can open them to see values and counterparties. The ledger therefore does not reveal amounts, balances, or who transacted with whom [R13].
-- **Oversight: auditor role.** The auditor (operated by the central bank — ADR-0004) approves (signs) every transaction before submission, can enforce business rules (limits, holds) and can see all values. This becomes the compliance/AML rule engine in Phase 4 [R13].
+- **Distribution: two-tier hybrid.**
+  - **Tier 1 (Wholesale):** The central bank transacts *only* with regulated commercial banks (`Bank{k}MSP`). The central bank issues new SWR into commercial bank reserve/custodial wallets and redeems currency from them. The central bank does *not* manage retail citizen accounts directly.
+  - **Tier 2 (Retail):** Commercial banks maintain retail customer accounts, enforce customer-level KYC/AML, and hold customer idemix wallet keys on their owner nodes. Customers transact with each other (intra-bank or cross-bank) through their commercial banks. See ADR-0008.
+- **Money representation: token-based (UTXO).** Currency exists as individual spendable tokens rather than a single database balance row. A transfer consumes input tokens and creates new output tokens with change-splitting ($1000 \text{ SWR} \to 100 \text{ to recipient} + 900 \text{ change to sender}$), like Bitcoin. Balances are derived dynamically from unspent outputs owned by an idemix identity. See ADR-0006 [R13].
+- **Privacy: Zero-Knowledge Proofs (zkatdlog).** 
+  - **Pedersen Commitments:** Amounts $v$ are hidden on-ledger using homomorphic commitments $C = g_0^{H(\text{SWR})} \cdot g_1^v \cdot g_2^r$ where $r$ is a random blinding factor. Observers and peers verify $\sum C_{\text{in}} = \sum C_{\text{out}}$ homomorphically without learning $v$.
+  - **ZKAT-DLOG Range Proofs:** Senders generate zero-knowledge range proofs proving $v \ge 0$ (preventing negative token creation) and proving ownership of the spending key without revealing it.
+  - **Idemix Anonymity:** Account identities on-chain are cryptographic commitments to Idemix credentials (`BN254` pairing curve), preventing address tracking.
+- **Oversight: auditor role (regulatory de-blinding).** The sender encrypts the commitment opening parameters $(v, r, \text{sender}, \text{recipient})$ under the **Auditor's public key**. The Central Bank Auditor node (`:9000`) de-blinds and inspects every transaction for AML/sanctions compliance and co-signs it before it can be committed to the ledger (ADR-0004) [R13].
 
 ## 3. Organizations, roles, and identities
 
