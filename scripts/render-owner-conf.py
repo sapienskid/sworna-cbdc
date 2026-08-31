@@ -50,7 +50,7 @@ for node in owners:
         "          id: %s\n"
         "          path: /var/fsc/keys/%s/fsc/msp/signcerts/cert.pem\n"
         "        addresses:\n"
-        "          P2P: %s.sworna.example.com:%d\n"
+        "          P2P: /dns4/%s.sworna.example.com/tcp/%d\n"
         "        aliases:\n"
         "          - %s" % (node, node, node, node, owner_p2p_port(node), node)
     )

@@ -36,13 +36,13 @@ fsc:
           id: auditor
           path: /var/fsc/keys/auditor/fsc/msp/signcerts/cert.pem
         addresses:
-          P2P: auditor.sworna.example.com:9001
+          P2P: /dns4/auditor.sworna.example.com/tcp/9001
       - name: issuer
         identity:
           id: issuer
           path: /var/fsc/keys/issuer/fsc/msp/signcerts/cert.pem
         addresses:
-          P2P: issuer.sworna.example.com:9101
+          P2P: /dns4/issuer.sworna.example.com/tcp/9101
 @@OWNER_RESOLVERS@@
 
 # ------------------- Fabric Configuration -------------------------
