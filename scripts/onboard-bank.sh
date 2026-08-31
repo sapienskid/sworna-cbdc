@@ -20,8 +20,9 @@
 set -euo pipefail
 
 MSP="${1:?usage: onboard-bank.sh <MSP> <org-json>}"
-ORG_JSON="${2:?usage: onboard-bank.sh <MSP> <org-json>}"
-[ -f "$ORG_JSON" ] || { echo "ERROR: org JSON not found: $ORG_JSON" >&2; exit 1; }
+ORG_JSON_ARG="${2:?usage: onboard-bank.sh <MSP> <org-json>}"
+[ -f "$ORG_JSON_ARG" ] || { echo "ERROR: org JSON not found: $ORG_JSON_ARG" >&2; exit 1; }
+ORG_JSON="$(cd "$(dirname "$ORG_JSON_ARG")" && pwd)/$(basename "$ORG_JSON_ARG")"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NETWORK="$ROOT/network"
