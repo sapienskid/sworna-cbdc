@@ -72,7 +72,13 @@ if bank_code:
 with open(sys.argv[1]) as f:
     tpl = f.read()
 
+if "owner" in sys.argv[1]:
+    listen_ip = opt(f"SWORNA_OWNER_{owner_node.upper()}_HOST", "0.0.0.0")
+else:
+    listen_ip = opt("SWORNA_CB_HOST", "0.0.0.0")
+
 out = tpl
+out = out.replace("@@LISTEN_IP@@", listen_ip)
 out = out.replace("@@CB_HOST@@", cb_host)
 out = out.replace("@@OWNER_NODE@@", owner_node)
 out = out.replace("@@OWNER_P2P@@", owner_p2p)

@@ -16,7 +16,7 @@ fsc:
   tls:
     enabled: false # TODO
   p2p:
-    listenAddress: /ip4/0.0.0.0/tcp/9101
+    listenAddress: /ip4/@@LISTEN_IP@@/tcp/9101
     # If empty, this is a P2P boostrap node. Otherwise, it contains the name of the FSC node that is a bootstrap node.
     # The name of the FSC node that is a bootstrap node must be set under fsc.endpoint.resolvers
     bootstrapNode: auditor
