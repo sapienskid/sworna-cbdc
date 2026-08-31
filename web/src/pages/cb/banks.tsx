@@ -106,7 +106,7 @@ export function CBBanks() {
                   </Select>
                 </TableCell>
                 <TableCell className="text-xs">{b.pool_size} wallets</TableCell>
-                <TableCell className="text-xs">{b.joined_at ? new Date(b.joined_at).toLocaleDateString() : "—"}</TableCell>
+                <TableCell className="text-xs">{b.joined_at ? new Date(b.joined_at.includes("T") ? b.joined_at : b.joined_at.replace(" ", "T") + "Z").toLocaleDateString() : "—"}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => provision(b.code)}>
