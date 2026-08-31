@@ -61,14 +61,23 @@ infoln "approving the definition for CentralBankMSP (v${CC_VERSION} seq ${CC_SEQ
 peer lifecycle chaincode approveformyorg -o localhost:7050 \
   --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
   --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
-  --package-id "$PACKAGE_ID" --signature-policy "$policy"
+  --package-id "$PACKAGE_ID"
 
-infoln "committing chaincode ${CC_NAME} v${CC_VERSION} seq ${CC_SEQUENCE} on '${CHANNEL}'"
+# Build peerAddresses and tlsRootCertFiles list for all onboarded peers
+PEER_FLAGS=(--peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA")
+for msp in $BANK_MSP_LIST; do
+  bank_org="$(echo "$msp" | sed 's/Bank/bank/;s/MSP//')"
+  tls_cert="$NETWORK/organizations/peerOrganizations/${bank_org}.sworna.example.com/tlsca/tlsca.${bank_org}.sworna.example.com-cert.pem"
+  if [ -f "$tls_cert" ]; then
+    PEER_FLAGS+=(--peerAddresses "peer0.${bank_org}.sworna.example.com:9051" --tlsRootCertFiles "$tls_cert")
+  fi
+done
+
+infoln "committing chaincode ${CC_NAME} v${CC_VERSION} seq ${CC_SEQUENCE} on '${CHANNEL}' across peers: ${PEER_FLAGS[*]}"
 peer lifecycle chaincode commit -o localhost:7050 \
   --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
   --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
-  --signature-policy "$policy" \
-  --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA"
+  "${PEER_FLAGS[@]}"
 
 infoln "committed. querying the committed definition:"
 peer lifecycle chaincode querycommitted --channelID "$CHANNEL" --name "$CC_NAME"

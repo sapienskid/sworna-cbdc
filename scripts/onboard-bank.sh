@@ -60,6 +60,11 @@ else
   successln "${MSP} added to channel '${CHANNEL}'"
 fi
 
+# Extract TLS root cert for peer-to-peer commit verification
+bank_org="$(echo "$MSP" | sed 's/Bank/bank/;s/MSP//')"
+mkdir -p "$NETWORK/organizations/peerOrganizations/${bank_org}.sworna.example.com/tlsca"
+jq -r '.values.MSP.value.config.tls_root_certs[0] // empty' "$ORG_JSON" | base64 -d > "$NETWORK/organizations/peerOrganizations/${bank_org}.sworna.example.com/tlsca/tlsca.${bank_org}.sworna.example.com-cert.pem" 2>/dev/null || true
+
 # ---- make the new owner reachable from the CB engine (live refresh) --------
 cd "$ROOT/token-services"
 export SWORNA_OWNERS="${SWORNA_OWNERS:?SWORNA_OWNERS (all owner nodes) must be set}"
