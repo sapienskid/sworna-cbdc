@@ -187,7 +187,7 @@ install_ccaas() {
   peer lifecycle chaincode approveformyorg -o orderer.sworna.example.com:7050 \
     --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
     --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
-    --package-id "$PACKAGE_ID"
+    --package-id "$PACKAGE_ID" --init-required
 
   log_info "starting ${CCAAS_PEERNAME}_${CC_NAME}_ccaas chaincode container"
   docker rm -f "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" >/dev/null 2>&1 || true

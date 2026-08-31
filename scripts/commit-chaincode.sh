@@ -61,7 +61,7 @@ infoln "approving the definition for CentralBankMSP (v${CC_VERSION} seq ${CC_SEQ
 peer lifecycle chaincode approveformyorg -o localhost:7050 \
   --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
   --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
-  --package-id "$PACKAGE_ID"
+  --package-id "$PACKAGE_ID" --init-required
 
 # Build peerAddresses and tlsRootCertFiles list for all onboarded peers
 PEER_FLAGS=(--peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA")
@@ -77,7 +77,13 @@ infoln "committing chaincode ${CC_NAME} v${CC_VERSION} seq ${CC_SEQUENCE} on '${
 peer lifecycle chaincode commit -o localhost:7050 \
   --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
   --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
-  "${PEER_FLAGS[@]}"
+  --init-required "${PEER_FLAGS[@]}"
 
 infoln "committed. querying the committed definition:"
 peer lifecycle chaincode querycommitted --channelID "$CHANNEL" --name "$CC_NAME"
+
+infoln "initializing public parameters via chaincode Init..."
+peer chaincode invoke -o localhost:7050 \
+  --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
+  --channelID "$CHANNEL" --name "$CC_NAME" --isInit -c '{"Args":[]}' \
+  "${PEER_FLAGS[@]}"
