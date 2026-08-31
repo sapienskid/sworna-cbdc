@@ -11,8 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-AccountStatus = Literal["active", "flagged", "frozen"]
-BankStatus = Literal["registered", "active", "suspended"]
+AccountStatus = str
+BankStatus = str
 
 
 class BankPermissions(BaseModel):
