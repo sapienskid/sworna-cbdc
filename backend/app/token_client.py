@@ -18,7 +18,7 @@ class TokenServiceError(RuntimeError):
 
 
 class TokenClient:
-    def __init__(self, timeout: float = 60.0) -> None:
+    def __init__(self, timeout: float = 120.0) -> None:
         self._timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
 
@@ -42,14 +42,18 @@ class TokenClient:
 
     # -- issuer ----------------------------------------------------------
     async def issue(self, amount_minor: int, node: str, wallet: str, message: str) -> str:
-        resp = await self._client.post(
-            f"{settings.issuer_url}/issuer/issue",
-            json={
-                "amount": {"code": "SWR", "value": amount_minor},
-                "counterparty": {"node": node, "account": wallet},
-                "message": message,
-            },
-        )
+        try:
+            resp = await self._client.post(
+                f"{settings.issuer_url}/issuer/issue",
+                json={
+                    "amount": {"code": "SWR", "value": amount_minor},
+                    "counterparty": {"node": node, "account": wallet},
+                    "message": message,
+                },
+                timeout=self._timeout,
+            )
+        except Exception as exc:
+            raise TokenServiceError(f"issue request failed: {exc}") from exc
         payload = resp.json()
         if resp.status_code != 200:
             self._raise(payload)
@@ -65,24 +69,32 @@ class TokenClient:
         amount_minor: int,
         message: str,
     ) -> str:
-        resp = await self._client.post(
-            f"{owner_base_url(from_node)}/owner/accounts/{from_wallet}/transfer",
-            json={
-                "amount": {"code": "SWR", "value": amount_minor},
-                "counterparty": {"node": to_node, "account": to_wallet},
-                "message": message,
-            },
-        )
+        try:
+            resp = await self._client.post(
+                f"{owner_base_url(from_node)}/owner/accounts/{from_wallet}/transfer",
+                json={
+                    "amount": {"code": "SWR", "value": amount_minor},
+                    "counterparty": {"node": to_node, "account": to_wallet},
+                    "message": message,
+                },
+                timeout=self._timeout,
+            )
+        except Exception as exc:
+            raise TokenServiceError(f"transfer request failed: {exc}") from exc
         payload = resp.json()
         if resp.status_code != 200:
             self._raise(payload)
         return self._txid(payload)
 
     async def redeem(self, wallet: str, node: str, amount_minor: int, message: str) -> str:
-        resp = await self._client.post(
-            f"{owner_base_url(node)}/owner/accounts/{wallet}/redeem",
-            json={"amount": {"code": "SWR", "value": amount_minor}, "message": message},
-        )
+        try:
+            resp = await self._client.post(
+                f"{owner_base_url(node)}/owner/accounts/{wallet}/redeem",
+                json={"amount": {"code": "SWR", "value": amount_minor}, "message": message},
+                timeout=self._timeout,
+            )
+        except Exception as exc:
+            raise TokenServiceError(f"redeem request failed: {exc}") from exc
         payload = resp.json()
         if resp.status_code != 200:
             self._raise(payload)
