@@ -36,6 +36,7 @@ services:
       - ../network/organizations:/var/fsc/fabric/organizations:ro
     ports:
       - "${OWNER_REST_PORT:?OWNER_REST_PORT must be set}:9000"
+      - "${OWNER_P2P_PORT:?OWNER_P2P_PORT must be set}:${OWNER_P2P_PORT:?OWNER_P2P_PORT must be set}"
     expose:
       - "${OWNER_P2P_PORT:?OWNER_P2P_PORT must be set}"
     networks:
