@@ -23,14 +23,32 @@ from ..token_client import TokenServiceError, token_client
 router = APIRouter(prefix="/api/v1", tags=["payments"])
 
 
-def _get_account(session: Session, account_number: str) -> Account:
+class InterbankAccount:
+    """Virtual account representation for counterparty bank recipient in interbank transfers."""
+    def __init__(self, account_number: str) -> None:
+        parts = account_number.split("-")
+        if len(parts) != 3 or parts[0] != "SWR":
+            raise HTTPException(400, f"invalid account number format '{account_number}'")
+        self.account_number = account_number
+        self.bank_code = parts[1]
+        k = int(self.bank_code)
+        seq = int(parts[2])
+        self.owner_node = f"owner{k}"
+        self.wallet = f"pool_{self.bank_code}_w{seq + 1}"
+        self.status = "active"
+        self.full_name = f"Interbank Account {account_number}"
+
+
+def _get_account(session: Session, account_number: str, allow_interbank: bool = False):
     account = session.scalar(select(Account).where(Account.account_number == account_number))
     if account is None:
+        if allow_interbank and account_number.startswith("SWR-"):
+            return InterbankAccount(account_number)
         raise HTTPException(404, f"account '{account_number}' not found")
     return account
 
 
-def _check_access(user: User, account: Account) -> None:
+def _check_access(user: User, account: Account | InterbankAccount) -> None:
     if user.role == "customer" and user.account_number != account.account_number:
         raise HTTPException(403, "not your account")
     if user.role == "bank_staff" and account.bank_code != user.bank_code:
@@ -45,7 +63,7 @@ async def transfer(
 ):
     sender = _get_account(session, body.from_account)
     _check_access(user, sender)
-    recipient = _get_account(session, body.to_account)
+    recipient = _get_account(session, body.to_account, allow_interbank=True)
 
     if sender.status != "active":
         raise HTTPException(403, f"account {sender.account_number} is {sender.status}")
