@@ -20,7 +20,8 @@ services:
       - ./keys:/var/fsc/keys:ro
       - ../network/organizations:/var/fsc/fabric/organizations:ro
     ports:
-      - 9000:9000
+      - "9000:9000"
+      - "9001:9001"
     expose:
       - 9001
     networks:
@@ -43,7 +44,8 @@ services:
       - ./keys:/var/fsc/keys:ro
       - ../network/organizations:/var/fsc/fabric/organizations:ro
     ports:
-      - 9100:9000
+      - "9100:9000"
+      - "9101:9101"
     expose:
       - 9101
     networks:
