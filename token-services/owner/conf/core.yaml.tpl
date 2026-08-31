@@ -3,7 +3,7 @@
 # token-services/owner/conf/<owner_node>/core.yaml (see scripts/bank-network.sh).
 # Scalar placeholders: @@OWNER_NODE@@ @@OWNER_P2P@@ @@BANK_ORG@@ @@BANK_MSP@@ @@PEER_PORT@@
 logging:
-  spec: info
+  spec: debug
   format: '%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}'
 
 # ------------------- FSC Node Configuration -------------------------

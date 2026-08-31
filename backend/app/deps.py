@@ -37,5 +37,8 @@ def require_roles(*roles: str):
 
 
 cb_admin = require_roles("cb_admin")
-bank_staff = require_roles("cb_admin", "bank_staff")
-customer = require_roles("cb_admin", "bank_staff", "customer")
+cb_mint = require_roles("cb_admin", "cb_mint_officer")
+cb_audit = require_roles("cb_admin", "cb_auditor")
+cb_staff = require_roles("cb_admin", "cb_mint_officer", "cb_auditor")
+bank_staff = require_roles("cb_admin", "cb_mint_officer", "cb_auditor", "bank_staff")
+customer = require_roles("cb_admin", "cb_mint_officer", "cb_auditor", "bank_staff", "customer")

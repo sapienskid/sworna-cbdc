@@ -9,11 +9,10 @@ package service
 import (
 	viewregistry "github.com/hyperledger-labs/fabric-smart-client/platform/view"
 	"github.com/hyperledger-labs/fabric-smart-client/platform/view/view"
-	"github.com/pkg/errors"
-
-	token2 "github.com/hyperledger-labs/fabric-token-sdk/token"
+	"github.com/hyperledger-labs/fabric-token-sdk/token"
 	"github.com/hyperledger-labs/fabric-token-sdk/token/services/ttx"
-	"github.com/hyperledger-labs/fabric-token-sdk/token/token"
+	token2 "github.com/hyperledger-labs/fabric-token-sdk/token/token"
+	"github.com/pkg/errors"
 )
 
 // SERVICE
@@ -51,7 +50,7 @@ type Redeem struct {
 	// Wallet is the identifier of the wallet that owns the tokens to redeem
 	Wallet string
 	// TokenIDs contains a list of token ids to redeem. If empty, tokens are selected on the spot.
-	TokenIDs []*token.ID
+	TokenIDs []*token2.ID
 	// TokenType of tokens to redeem
 	TokenType string
 	// Quantity to redeem
@@ -79,7 +78,11 @@ func (v *RedeemView) Call(context view.Context) (interface{}, error) {
 
 	// The sender will select tokens owned by this wallet
 	logger.Debug("loading wallet [%s]", v.Wallet)
-	senderWallet := ttx.GetWallet(context, v.Wallet)
+	senderWallet := ttx.GetWallet(context, v.Wallet,
+		token.WithNetwork("mynetwork"),
+		token.WithChannel("settlement"),
+		token.WithNamespace("tokenchaincode"),
+	)
 	if senderWallet == nil {
 		return "", errors.Errorf("sender wallet [%s] not found", v.Wallet)
 	}
@@ -99,7 +102,7 @@ func (v *RedeemView) Call(context view.Context) (interface{}, error) {
 		senderWallet,
 		v.TokenType,
 		v.Quantity,
-		token2.WithTokenIDs(v.TokenIDs...),
+		token.WithTokenIDs(v.TokenIDs...),
 	)
 	if err != nil {
 		return "", errors.Wrap(err, "failed adding tokens to redeem")

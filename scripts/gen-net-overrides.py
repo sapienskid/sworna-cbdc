@@ -44,12 +44,27 @@ def render(services: dict) -> str:
 
 
 if MODE == "cb":
-    hosts = [f"{o}.sworna.example.com:{owner_host(o)}" for o in owners if owner_host(o)]
+    hosts = []
+    for o in owners:
+        ip = owner_host(o)
+        if ip:
+            hosts.append(f"{o}.sworna.example.com:{ip}")
+            # Map owner1 -> bank1, owner2 -> bank2
+            k = o.removeprefix("owner")
+            hosts.append(f"peer0.bank{k}.sworna.example.com:{ip}")
+    hosts.extend([
+        "orderer.sworna.example.com:100.72.112.29",
+        "peer0.centralbank.sworna.example.com:100.72.112.29",
+        "auditor.sworna.example.com:100.72.112.29",
+        "issuer.sworna.example.com:100.72.112.29",
+    ])
     body = render({"auditor": hosts, "issuer": hosts})
 else:
     cb = req("SWORNA_CB_HOST")
     hosts = [
         f"orderer.sworna.example.com:{cb}",
+        f"peer0.centralbank.sworna.example.com:{cb}",
+        f"ca.centralbank.sworna.example.com:{cb}",
         f"auditor.sworna.example.com:{cb}",
         f"issuer.sworna.example.com:{cb}",
     ]
@@ -57,6 +72,8 @@ else:
         ip = owner_host(o)
         if ip:
             hosts.append(f"{o}.sworna.example.com:{ip}")
+            k = o.removeprefix("owner")
+            hosts.append(f"peer0.bank{k}.sworna.example.com:{ip}")
     body = render({"owner": hosts})
 
 if OUT:

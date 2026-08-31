@@ -14,7 +14,7 @@
 set -Eeuo pipefail
 
 ORG="$BANK_ORG"
-ORG_DIR="organizations/peerOrganizations/${ORG}.sworna.example.com"
+ORG_DIR="${PWD}/organizations/peerOrganizations/${ORG}.sworna.example.com"
 CA_HOSTPORT="localhost:${BANK_CA_PORT}"
 CA_CERT="${PWD}/organizations/fabric-ca/${ORG}/ca-cert.pem"
 ADMIN_PW=adminpw
@@ -22,7 +22,7 @@ ADMIN_PW=adminpw
 log() { printf '[%s] %s\n' "$(date +'%H:%M:%S')" "$*"; }
 
 mkdir -p "$ORG_DIR"
-export FABRIC_CA_CLIENT_HOME="${PWD}/${ORG_DIR}"
+export FABRIC_CA_CLIENT_HOME="${ORG_DIR}"
 
 fabric-ca-client enroll -u "https://admin:${ADMIN_PW}@${CA_HOSTPORT}" \
   --caname "$BANK_CA_NAME" --tls.certfiles "$CA_CERT"
@@ -55,7 +55,7 @@ PEER=peer0
 register_enroll_peer() {
   log "registering + enrolling $PEER (msp + tls)"
   fabric-ca-client register --caname "$BANK_CA_NAME" --id.name "$PEER" --id.secret "${PEER}pw" \
-    --id.type peer --tls.certfiles "$CA_CERT"
+    --id.type peer --tls.certfiles "$CA_CERT" || true
   fabric-ca-client enroll -u "https://${PEER}:${PEER}pw@${CA_HOSTPORT}" --caname "$BANK_CA_NAME" \
     -M "${ORG_DIR}/peers/${PEER}.${ORG}.sworna.example.com/msp" --tls.certfiles "$CA_CERT"
   cp "${ORG_DIR}/msp/config.yaml" "${ORG_DIR}/peers/${PEER}.${ORG}.sworna.example.com/msp/config.yaml"
@@ -74,9 +74,9 @@ register_enroll_peer() {
 
 log "registering user1 + org admin"
 fabric-ca-client register --caname "$BANK_CA_NAME" --id.name user1 --id.secret user1pw \
-  --id.type client --tls.certfiles "$CA_CERT"
+  --id.type client --tls.certfiles "$CA_CERT" || true
 fabric-ca-client register --caname "$BANK_CA_NAME" --id.name orgadmin --id.secret orgadminpw \
-  --id.type admin --tls.certfiles "$CA_CERT"
+  --id.type admin --tls.certfiles "$CA_CERT" || true
 
 register_enroll_peer
 

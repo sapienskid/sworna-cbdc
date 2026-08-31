@@ -21,7 +21,11 @@ type ValueByTokenType map[string]int64
 // GetAllBalances returns a map of all wallets with their balances per token type
 func (s TokenService) GetAllBalances() (walletBalance BalanceByWallet, err error) {
 	walletBalance = make(BalanceByWallet)
-	wm := token.GetManagementService(s.FSC).WalletManager()
+	wm := token.GetManagementService(s.FSC,
+		token.WithNetwork("mynetwork"),
+		token.WithChannel("settlement"),
+		token.WithNamespace("tokenchaincode"),
+	).WalletManager()
 	wallets, err := wm.OwnerWalletIDs()
 	if err != nil {
 		return walletBalance, errors.Wrap(err, "can't get list of wallets")
@@ -47,7 +51,11 @@ func (s TokenService) GetBalance(wallet string, tokenType string) (typeVal Value
 	if wallet == "" {
 		return typeVal, errors.New("no wallet id provided")
 	}
-	w := ttx.GetWallet(s.FSC, wallet)
+	w := ttx.GetWallet(s.FSC, wallet,
+		token.WithNetwork("mynetwork"),
+		token.WithChannel("settlement"),
+		token.WithNamespace("tokenchaincode"),
+	)
 	if w == nil {
 		return nil, errors.Errorf("wallet not found: %s", wallet)
 	}

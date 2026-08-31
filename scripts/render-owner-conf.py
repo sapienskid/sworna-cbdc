@@ -60,14 +60,14 @@ for node in owners:
 wallets = []
 for w in demo:
     wallets.append(
-        "          - id: %s\n            path: /var/fsc/keys/%s/wallet/%s/msp" % (w, owner_node, w)
+        "          - id: %s\n            path: /var/fsc/keys/%s/wallet/%s/msp\n            type: idemix" % (w, owner_node, w)
     )
 if bank_code:
     for i in range(1, pool_size + 1):
         wid = "pool_%s_w%d" % (bank_code, i)
         is_default = "\n            default: true" if i == 1 else ""
         wallets.append(
-            "          - id: %s%s\n            path: /var/fsc/keys/%s/wallet/%s/msp" % (wid, is_default, owner_node, wid)
+            "          - id: %s%s\n            path: /var/fsc/keys/%s/wallet/%s/msp\n            type: idemix" % (wid, is_default, owner_node, wid)
         )
 
 with open(sys.argv[1]) as f:

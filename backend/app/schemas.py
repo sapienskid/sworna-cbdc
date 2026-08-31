@@ -95,9 +95,52 @@ class RedeemRequest(BaseModel):
 
 
 class IssueRequest(BaseModel):
-    to_account: str
+    to_account: str | None = None
+    bank_code: str | None = None
     amount: Decimal = Field(gt=0, description="SWR, major units")
     reference: str = ""
+
+
+class MintToBankRequest(BaseModel):
+    bank_code: str
+    amount: Decimal = Field(gt=0, description="SWR, major units")
+    reference: str = ""
+
+
+class AllocateBankRequest(BaseModel):
+    from_bank_code: str
+    to_bank_code: str
+    amount: Decimal = Field(gt=0, description="SWR, major units")
+    reference: str = ""
+
+
+class BurnFromBankRequest(BaseModel):
+    bank_code: str
+    amount: Decimal = Field(gt=0, description="SWR, major units")
+    reference: str = ""
+
+
+class CashInOutRequest(BaseModel):
+    account_number: str
+    amount: Decimal = Field(gt=0, description="SWR, major units")
+    reference: str = ""
+
+
+class CBUserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=6)
+    role: Literal["cb_admin", "cb_mint_officer", "cb_auditor"]
+    full_name: str = ""
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    role: str
+    bank_code: str | None
+    account_number: str | None
+    created_at: datetime
 
 
 class TxLogRead(BaseModel):

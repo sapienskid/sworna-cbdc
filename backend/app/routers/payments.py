@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..amounts import to_minor
 from ..database import get_session
-from ..deps import bank_staff
+from ..deps import bank_staff, customer
 from ..models import Account, TransactionLog, User
 from ..schemas import RedeemRequest, TransferRequest, TxLogRead
 from ..token_client import TokenServiceError, token_client
@@ -40,7 +40,7 @@ def _check_access(user: User, account: Account) -> None:
 @router.post("/payments/transfer", response_model=TxLogRead)
 async def transfer(
     body: TransferRequest,
-    user: User = Depends(bank_staff),
+    user: User = Depends(customer),
     session: Session = Depends(get_session),
 ):
     sender = _get_account(session, body.from_account)

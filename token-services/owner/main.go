@@ -15,6 +15,7 @@ import (
 	viewregistry "github.com/hyperledger-labs/fabric-smart-client/platform/view"
 	"github.com/hyperledger-labs/fabric-smart-client/platform/view/services/flogging"
 	tokensdk "github.com/hyperledger-labs/fabric-token-sdk/token/sdk"
+	"github.com/hyperledger-labs/fabric-token-sdk/token"
 )
 
 var logger = flogging.MustGetLogger("main")
@@ -28,6 +29,24 @@ func main() {
 	registry := viewregistry.GetRegistry(fsc)
 	succeedOrPanic(registry.RegisterResponder(&service.AcceptCashView{}, "github.com/hyperledger/fabric-samples/token-sdk/issuer/service/IssueCashView"))
 	succeedOrPanic(registry.RegisterResponder(&service.AcceptCashView{}, &service.TransferView{}))
+
+	// Pre-load public parameters so all Idemix wallets are initialized in memory
+	go func() {
+		tms := token.GetManagementService(fsc,
+			token.WithNetwork("mynetwork"),
+			token.WithChannel("settlement"),
+			token.WithNamespace("tokenchaincode"),
+		)
+		if tms != nil {
+			ppm := tms.PublicParametersManager()
+			if ppm != nil {
+				pp := ppm.PublicParameters()
+				if pp != nil {
+					logger.Infof("Public parameters loaded successfully: precision=%d", pp.Precision())
+				}
+			}
+		}
+	}()
 
 	controller := routes.Controller{Service: service.TokenService{FSC: fsc}}
 	err := routes.StartWebServer(port, controller, logger)

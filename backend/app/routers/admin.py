@@ -14,11 +14,20 @@ from sqlalchemy.orm import Session
 
 from ..amounts import to_minor, to_swr
 from ..database import get_session
-from ..deps import cb_admin
+from ..deps import cb_admin, cb_audit, cb_mint, cb_staff
 from ..models import Account, Bank, TransactionLog, User
 from ..paths import BIN, FABRIC_CFG, NETWORK_HOME
 from ..provisioning import ProvisioningError, provision_wallet_pool
-from ..schemas import AdminOverview, CirculationRow, IssueRequest, TxLogRead
+from ..schemas import (
+    AdminOverview,
+    AllocateBankRequest,
+    BurnFromBankRequest,
+    CBUserCreate,
+    CirculationRow,
+    IssueRequest,
+    TxLogRead,
+    UserRead,
+)
 from ..token_client import TokenServiceError, token_client
 
 router = APIRouter(prefix="/api/v1", tags=["admin"])
@@ -67,33 +76,72 @@ def _peer_env() -> dict:
     return env
 
 
+@router.post("/admin/mint", response_model=TxLogRead, status_code=201)
 @router.post("/admin/issue", response_model=TxLogRead, status_code=201)
-async def issue(
+async def mint_to_bank(
     body: IssueRequest,
-    user: User = Depends(cb_admin),
+    user: User = Depends(cb_mint),
     session: Session = Depends(get_session),
 ):
-    account = session.scalar(select(Account).where(Account.account_number == body.to_account))
-    if account is None:
-        raise HTTPException(404, f"account '{body.to_account}' not found")
+    """Mint CBDC base money and allocate to a commercial bank's reserve wallet."""
+    # Find bank either by bank_code or by target account if legacy call
+    bank = None
+    target_wallet = None
+    target_node = None
+    to_label = None
+
+    if body.bank_code:
+        bank = session.scalar(select(Bank).where(Bank.code == body.bank_code))
+        if bank is None:
+            raise HTTPException(404, f"bank with code '{body.bank_code}' not found")
+        target_wallet = f"pool_{bank.code}_w1"
+        target_node = bank.owner_node
+        to_label = f"RESERVE-{bank.code}"
+    elif body.to_account:
+        if body.to_account.startswith("RESERVE-"):
+            bcode = body.to_account.removeprefix("RESERVE-")
+            bank = session.scalar(select(Bank).where(Bank.code == bcode))
+            if bank is None:
+                raise HTTPException(404, f"bank '{bcode}' not found")
+            target_wallet = f"pool_{bank.code}_w1"
+            target_node = bank.owner_node
+            to_label = f"RESERVE-{bank.code}"
+        else:
+            account = session.scalar(select(Account).where(Account.account_number == body.to_account))
+            if account is not None:
+                target_wallet = account.wallet
+                target_node = account.owner_node
+                to_label = account.account_number
+            else:
+                # Fallback: check if to_account is a bank code
+                bank = session.scalar(select(Bank).where(Bank.code == body.to_account))
+                if bank:
+                    target_wallet = f"pool_{bank.code}_w1"
+                    target_node = bank.owner_node
+                    to_label = f"RESERVE-{bank.code}"
+                else:
+                    raise HTTPException(404, f"target bank or account '{body.to_account}' not found")
+    else:
+        raise HTTPException(400, "either 'bank_code' or 'to_account' must be provided")
 
     amount_minor = to_minor(body.amount)
     try:
         txid = await token_client.issue(
             amount_minor=amount_minor,
-            node=account.owner_node,
-            wallet=account.wallet,
-            message=body.reference,
+            node=target_node,
+            wallet=target_wallet,
+            message=body.reference or f"Wholesale CBDC Mint to {to_label}",
         )
     except TokenServiceError as exc:
         raise HTTPException(502, f"token service error: {exc}") from exc
 
     log = TransactionLog(
         txid=txid,
-        tx_type="issue",
-        to_account=account.account_number,
+        tx_type="mint",
+        from_account="CENTRAL_BANK",
+        to_account=to_label,
         amount_minor=amount_minor,
-        reference=body.reference,
+        reference=body.reference or "Wholesale CBDC Issuance",
     )
     session.add(log)
     session.commit()
@@ -101,38 +149,120 @@ async def issue(
     return log
 
 
-@router.post("/admin/banks/{code}/provision", response_model=ProvisionResult)
-async def provision_bank_keys(
-    code: str,
+@router.post("/admin/allocate", response_model=TxLogRead, status_code=201)
+async def allocate_between_banks(
+    body: AllocateBankRequest,
+    user: User = Depends(cb_mint),
+    session: Session = Depends(get_session),
+):
+    """Wholesale interbank liquidity allocation managed by Central Bank."""
+    from_bank = session.scalar(select(Bank).where(Bank.code == body.from_bank_code))
+    if from_bank is None:
+        raise HTTPException(404, f"source bank '{body.from_bank_code}' not found")
+    to_bank = session.scalar(select(Bank).where(Bank.code == body.to_bank_code))
+    if to_bank is None:
+        raise HTTPException(404, f"destination bank '{body.to_bank_code}' not found")
+
+    amount_minor = to_minor(body.amount)
+    from_wallet = f"pool_{from_bank.code}_w1"
+    to_wallet = f"pool_{to_bank.code}_w1"
+
+    try:
+        txid = await token_client.transfer(
+            from_wallet=from_wallet,
+            from_node=from_bank.owner_node,
+            to_wallet=to_wallet,
+            to_node=to_bank.owner_node,
+            amount_minor=amount_minor,
+            message=body.reference or f"Wholesale Allocation {from_bank.code}->{to_bank.code}",
+        )
+    except TokenServiceError as exc:
+        raise HTTPException(502, f"token service error: {exc}") from exc
+
+    log = TransactionLog(
+        txid=txid,
+        tx_type="wholesale_allocation",
+        from_account=f"RESERVE-{from_bank.code}",
+        to_account=f"RESERVE-{to_bank.code}",
+        amount_minor=amount_minor,
+        reference=body.reference or "Wholesale Interbank Allocation",
+    )
+    session.add(log)
+    session.commit()
+    session.refresh(log)
+    return log
+
+
+@router.post("/admin/burn", response_model=TxLogRead, status_code=201)
+async def burn_from_bank(
+    body: BurnFromBankRequest,
+    user: User = Depends(cb_mint),
+    session: Session = Depends(get_session),
+):
+    """Revoke / Redeem CBDC from a commercial bank's reserve back into CB vault."""
+    bank = session.scalar(select(Bank).where(Bank.code == body.bank_code))
+    if bank is None:
+        raise HTTPException(404, f"bank '{body.bank_code}' not found")
+
+    amount_minor = to_minor(body.amount)
+    target_wallet = f"pool_{bank.code}_w1"
+
+    try:
+        txid = await token_client.redeem(
+            wallet=target_wallet,
+            node=bank.owner_node,
+            amount_minor=amount_minor,
+            message=body.reference or f"Wholesale CBDC Burn from {bank.code}",
+        )
+    except TokenServiceError as exc:
+        raise HTTPException(502, f"token service error: {exc}") from exc
+
+    log = TransactionLog(
+        txid=txid,
+        tx_type="burn",
+        from_account=f"RESERVE-{bank.code}",
+        to_account="CENTRAL_BANK",
+        amount_minor=amount_minor,
+        reference=body.reference or "Wholesale CBDC Redemption/Burn",
+    )
+    session.add(log)
+    session.commit()
+    session.refresh(log)
+    return log
+
+
+@router.get("/admin/users", response_model=list[UserRead])
+def list_cb_users(user: User = Depends(cb_admin), session: Session = Depends(get_session)):
+    """List Central Bank staff users."""
+    return session.scalars(select(User).where(User.role.in_(["cb_admin", "cb_mint_officer", "cb_auditor"]))).all()
+
+
+@router.post("/admin/users", response_model=UserRead, status_code=201)
+def create_cb_user(
+    body: CBUserCreate,
     user: User = Depends(cb_admin),
     session: Session = Depends(get_session),
 ):
-    """Generate (top up) the bank's wallet pool via the token CA."""
-    bank = session.scalar(select(Bank).where(Bank.code == code))
-    if bank is None:
-        raise HTTPException(404, "bank not found")
-    try:
-        provision_wallet_pool(bank)
-    except ProvisioningError as exc:
-        raise HTTPException(502, f"provisioning failed: {exc}") from exc
-    session.commit()
-    session.refresh(bank)
-    used = len(bank.wallet_pool.get("used", []))
-    free = len(bank.wallet_pool.get("free", []))
-    return ProvisionResult(
-        bank_code=bank.code,
-        bank_name=bank.name,
-        owner_node=bank.owner_node,
-        wallets_generated=used + free,
-        used=used,
-        free=free,
+    """Create a new Central Bank staff user with role-based access."""
+    if session.scalar(select(User).where(User.username == body.username)):
+        raise HTTPException(409, f"username '{body.username}' is already in use")
+    from ..security import hash_password
+
+    new_user = User(
+        username=body.username,
+        password_hash=hash_password(body.password),
+        role=body.role,
     )
+    session.add(new_user)
+    session.commit()
+    session.refresh(new_user)
+    return new_user
 
 
 @router.get("/admin/transactions", response_model=list[TxLogRead])
 def list_transactions(
     limit: int = 50,
-    user: User = Depends(cb_admin),
+    user: User = Depends(cb_staff),
     session: Session = Depends(get_session),
 ):
     return session.scalars(

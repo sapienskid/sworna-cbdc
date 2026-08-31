@@ -14,6 +14,7 @@ import (
 	fabric "github.com/hyperledger-labs/fabric-smart-client/platform/fabric/sdk"
 	"github.com/hyperledger-labs/fabric-smart-client/platform/view/services/flogging"
 	tokensdk "github.com/hyperledger-labs/fabric-token-sdk/token/sdk"
+	"github.com/hyperledger-labs/fabric-token-sdk/token"
 )
 
 var logger = flogging.MustGetLogger("main")
@@ -23,6 +24,25 @@ func main() {
 	port := getEnv("PORT", "9100")
 
 	fsc := startFabricSmartClient(dir)
+
+	// Pre-load public parameters so all wallets are initialized in memory
+	go func() {
+		tms := token.GetManagementService(fsc,
+			token.WithNetwork("mynetwork"),
+			token.WithChannel("settlement"),
+			token.WithNamespace("tokenchaincode"),
+		)
+		if tms != nil {
+			ppm := tms.PublicParametersManager()
+			if ppm != nil {
+				pp := ppm.PublicParameters()
+				if pp != nil {
+					logger.Infof("Public parameters loaded successfully: precision=%d", pp.Precision())
+				}
+			}
+		}
+	}()
+
 	controller := routes.Controller{Service: service.TokenService{FSC: fsc}}
 	err := routes.StartWebServer(port, controller, logger)
 	if err != nil {

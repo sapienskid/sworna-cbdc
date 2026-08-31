@@ -19,6 +19,7 @@ from ..schemas import (
     BankPermissionsUpdate,
     BankRead,
     BankStatusUpdate,
+    CashInOutRequest,
     StatementItem,
     StatusUpdate,
 )
@@ -277,3 +278,121 @@ async def account_statements(
             )
         )
     return items
+
+
+@router.get("/bank/reserve", response_model=BalanceRead)
+async def get_bank_reserve(
+    user: User = Depends(bank_staff),
+    session: Session = Depends(get_session),
+):
+    """Get the master reserve balance of the bank."""
+    bank = session.scalar(select(Bank).where(Bank.code == user.bank_code))
+    if bank is None:
+        raise HTTPException(404, "bank not found")
+    reserve_wallet = f"pool_{bank.code}_w1"
+    try:
+        minor = await token_client.balances(wallet=reserve_wallet, node=bank.owner_node)
+    except TokenServiceError as exc:
+        raise HTTPException(502, f"token service error: {exc}") from exc
+    return BalanceRead(
+        account_number=f"RESERVE-{bank.code}",
+        full_name=f"{bank.name.upper()} Reserve Vault",
+        bank_code=bank.code,
+        balance=str(to_swr(minor)),
+    )
+
+
+@router.post("/bank/deposit")
+async def deposit_to_account(
+    body: CashInOutRequest,
+    user: User = Depends(bank_staff),
+    session: Session = Depends(get_session),
+):
+    """Disburse CBDC from bank master reserve into a customer's account (Cash In)."""
+    account = session.scalar(select(Account).where(Account.account_number == body.account_number))
+    if account is None:
+        raise HTTPException(404, f"account '{body.account_number}' not found")
+    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+        raise HTTPException(403, "account is not on your bank")
+    if account.status != "active":
+        raise HTTPException(403, f"account {account.account_number} is {account.status}")
+
+    bank = account.bank
+    reserve_wallet = f"pool_{bank.code}_w1"
+    from ..amounts import to_minor
+    amount_minor = to_minor(body.amount)
+
+    try:
+        txid = await token_client.transfer(
+            from_wallet=reserve_wallet,
+            from_node=bank.owner_node,
+            to_wallet=account.wallet,
+            to_node=account.owner_node,
+            amount_minor=amount_minor,
+            message=body.reference or f"Cash-In Deposit to {account.account_number}",
+        )
+    except TokenServiceError as exc:
+        raise HTTPException(502, f"token service error: {exc}") from exc
+
+    from ..models import TransactionLog
+    log = TransactionLog(
+        txid=txid,
+        tx_type="deposit",
+        from_account=f"RESERVE-{bank.code}",
+        to_account=account.account_number,
+        amount_minor=amount_minor,
+        reference=body.reference or "Cash-In Deposit",
+    )
+    session.add(log)
+    session.commit()
+    session.refresh(log)
+    return log
+
+
+@router.post("/bank/withdraw")
+async def withdraw_from_account(
+    body: CashInOutRequest,
+    user: User = Depends(customer),
+    session: Session = Depends(get_session),
+):
+    """Redeem customer CBDC back to the bank's master reserve (Cash Out)."""
+    account = session.scalar(select(Account).where(Account.account_number == body.account_number))
+    if account is None:
+        raise HTTPException(404, f"account '{body.account_number}' not found")
+    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+        raise HTTPException(403, "account is not on your bank")
+    if user.role == "customer" and user.account_number != body.account_number:
+        raise HTTPException(403, "not your account")
+    if account.status != "active":
+        raise HTTPException(403, f"account {account.account_number} is {account.status}")
+
+    bank = account.bank
+    reserve_wallet = f"pool_{bank.code}_w1"
+    from ..amounts import to_minor
+    amount_minor = to_minor(body.amount)
+
+    try:
+        txid = await token_client.transfer(
+            from_wallet=account.wallet,
+            from_node=account.owner_node,
+            to_wallet=reserve_wallet,
+            to_node=bank.owner_node,
+            amount_minor=amount_minor,
+            message=body.reference or f"Cash-Out Withdrawal from {account.account_number}",
+        )
+    except TokenServiceError as exc:
+        raise HTTPException(502, f"token service error: {exc}") from exc
+
+    from ..models import TransactionLog
+    log = TransactionLog(
+        txid=txid,
+        tx_type="withdraw",
+        from_account=account.account_number,
+        to_account=f"RESERVE-{bank.code}",
+        amount_minor=amount_minor,
+        reference=body.reference or "Cash-Out Withdrawal",
+    )
+    session.add(log)
+    session.commit()
+    session.refresh(log)
+    return log

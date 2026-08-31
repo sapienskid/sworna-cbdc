@@ -92,6 +92,15 @@ export interface ProvisionResult {
   free: number;
 }
 
+export interface UserRead {
+  id: number;
+  username: string;
+  role: string;
+  bank_code: string | null;
+  account_number: string | null;
+  created_at: string;
+}
+
 export interface LedgerStatus {
   channel: string;
   height: number;
@@ -167,13 +176,29 @@ export const api = {
   statements: (account_number: string) =>
     request<StatementItem[]>(`/accounts/${account_number}/statements`),
 
+  bankReserve: () => request<Balance>("/bank/reserve"),
+  deposit: (body: { account_number: string; amount: string; reference?: string }) =>
+    request<TxLog>("/bank/deposit", { method: "POST", body: JSON.stringify(body) }),
+  withdraw: (body: { account_number: string; amount: string; reference?: string }) =>
+    request<TxLog>("/bank/withdraw", { method: "POST", body: JSON.stringify(body) }),
+
   transfer: (body: { from_account: string; to_account: string; amount: string; reference: string }) =>
     request<TxLog>("/payments/transfer", { method: "POST", body: JSON.stringify(body) }),
   redeem: (body: { account: string; amount: string; reference: string }) =>
     request<TxLog>("/payments/redeem", { method: "POST", body: JSON.stringify(body) }),
 
-  issue: (body: { to_account: string; amount: string; reference: string }) =>
-    request<TxLog>("/admin/issue", { method: "POST", body: JSON.stringify(body) }),
+  mint: (body: { bank_code: string; amount: string; reference?: string }) =>
+    request<TxLog>("/admin/mint", { method: "POST", body: JSON.stringify(body) }),
+  allocate: (body: { from_bank_code: string; to_bank_code: string; amount: string; reference?: string }) =>
+    request<TxLog>("/admin/allocate", { method: "POST", body: JSON.stringify(body) }),
+  burn: (body: { bank_code: string; amount: string; reference?: string }) =>
+    request<TxLog>("/admin/burn", { method: "POST", body: JSON.stringify(body) }),
+  cbUsers: () => request<UserRead[]>("/admin/users"),
+  createCbUser: (body: { username: string; password: string; role: string; full_name?: string }) =>
+    request<UserRead>("/admin/users", { method: "POST", body: JSON.stringify(body) }),
+
+  issue: (body: { to_account?: string; bank_code?: string; amount: string; reference?: string }) =>
+    request<TxLog>("/admin/mint", { method: "POST", body: JSON.stringify(body) }),
   overview: () => request<Overview>("/admin/overview"),
   transactions: () => request<TxLog[]>("/admin/transactions"),
   ledger: () => request<LedgerStatus>("/admin/ledger"),

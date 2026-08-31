@@ -52,6 +52,43 @@ else
   createConfigUpdate "$CHANNEL" "$ARTIFACTS/config.json" "$ARTIFACTS/modified_config.json" "$ARTIFACTS/update_envelope.pb"
   signConfigtxAsPeerOrg 1 "$ARTIFACTS/update_envelope.pb"
 
+  # --- collect co-signatures from all existing bank peers ---
+  # We need majority of current channel members to sign the update
+  # Parse existing bank MSPs from channel config
+  existing_banks=$(jq -r '.channel_group.groups.Application.groups | keys[]' "$ARTIFACTS/config.json" | grep -v CentralBankMSP || true)
+  for bank_msp in $existing_banks; do
+    bank_num=$(echo "$bank_msp" | grep -oP '\d+')
+    bank_code=$(printf "%03d" "$bank_num")
+    owner_host_var="SWORNA_OWNER_OWNER${bank_num}_HOST"
+    bank_host="${!owner_host_var:-}"
+    if [ -z "$bank_host" ]; then
+      warnln "  Skipping ${bank_msp}: ${owner_host_var} not set"
+      continue
+    fi
+    infoln "  sending update_envelope.pb to ${bank_msp} at ${bank_host} for co-signature"
+    # Push the .pb file to bank VM
+    scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      "$ARTIFACTS/update_envelope.pb" \
+      "${SWORNA_BANK_USER:-bankpt}@${bank_host}:~/sworna-cbdc/network/channel-artifacts/update_envelope.pb"
+    # Sign it remotely with Bank's admin MSP
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      "${SWORNA_BANK_USER:-bankpt}@${bank_host}" \
+      "cd ~/sworna-cbdc && export PATH=\$PATH:~/sworna-cbdc/bin && \
+       FABRIC_CFG_PATH=~/sworna-cbdc/config \
+       CORE_PEER_TLS_ENABLED=true \
+       CORE_PEER_LOCALMSPID=${bank_msp} \
+       CORE_PEER_MSPCONFIGPATH=~/sworna-cbdc/network/organizations/peerOrganizations/bank${bank_num}.sworna.example.com/users/Admin@bank${bank_num}.sworna.example.com/msp \
+       CORE_PEER_ADDRESS=localhost:\$((9051 + 2000 * (${bank_num} - 1))) \
+       CORE_PEER_TLS_ROOTCERT_FILE=~/sworna-cbdc/network/organizations/peerOrganizations/bank${bank_num}.sworna.example.com/peers/peer0.bank${bank_num}.sworna.example.com/tls/ca.crt \
+       ~/sworna-cbdc/bin/peer channel signconfigtx -f ~/sworna-cbdc/network/channel-artifacts/update_envelope.pb" \
+      2>&1 | grep -v "^2026\|^Warning\|^DEBUG" || true
+    # Pull the signed .pb back
+    scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      "${SWORNA_BANK_USER:-bankpt}@${bank_host}:~/sworna-cbdc/network/channel-artifacts/update_envelope.pb" \
+      "$ARTIFACTS/update_envelope.pb"
+    infoln "  ${bank_msp} co-signed OK"
+  done
+
   infoln "submitting the config update to add ${MSP}"
   setGlobals 1
   peer channel update -f "$ARTIFACTS/update_envelope.pb" -c "$CHANNEL" \

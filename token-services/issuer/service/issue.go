@@ -11,6 +11,7 @@ import (
 	viewregistry "github.com/hyperledger-labs/fabric-smart-client/platform/view"
 	"github.com/hyperledger-labs/fabric-smart-client/platform/view/services/flogging"
 	"github.com/hyperledger-labs/fabric-smart-client/platform/view/view"
+	"github.com/hyperledger-labs/fabric-token-sdk/token"
 	"github.com/hyperledger-labs/fabric-token-sdk/token/services/ttx"
 	"github.com/pkg/errors"
 )
@@ -94,7 +95,11 @@ func (v *IssueCashView) Call(context view.Context) (interface{}, error) {
 	// Notice that, this step would not be required if the issuer knew already which
 	// identity the recipient wants to use.
 	logger.Infof("requesting [%s] identity from [%s]", v.Recipient, v.RecipientNode)
-	recipient, err := ttx.RequestRecipientIdentity(context, rec)
+	recipient, err := ttx.RequestRecipientIdentity(context, rec,
+		token.WithNetwork("mynetwork"),
+		token.WithChannel("settlement"),
+		token.WithNamespace("tokenchaincode"),
+	)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed getting recipient identity from %s", v.RecipientNode)
 	}

@@ -9,6 +9,7 @@ package service
 import (
 	viewregistry "github.com/hyperledger-labs/fabric-smart-client/platform/view"
 	"github.com/hyperledger-labs/fabric-smart-client/platform/view/view"
+	"github.com/hyperledger-labs/fabric-token-sdk/token"
 	"github.com/hyperledger-labs/fabric-token-sdk/token/services/ttx"
 	"github.com/pkg/errors"
 )
@@ -70,7 +71,11 @@ func (v *TransferView) Call(context view.Context) (interface{}, error) {
 	// FSC node to ask for the identity to use to assign ownership of the freshly created token.
 	var recipient view.Identity
 	var err error
-	w := ttx.GetWallet(context, v.Recipient)
+	w := ttx.GetWallet(context, v.Recipient,
+		token.WithNetwork("mynetwork"),
+		token.WithChannel("settlement"),
+		token.WithNamespace("tokenchaincode"),
+	)
 	if w != nil {
 		// Get recipient identity from own wallet
 		logger.Infof("getting local identity for %s", v.Recipient)
@@ -89,7 +94,11 @@ func (v *TransferView) Call(context view.Context) (interface{}, error) {
 
 		// Request recipient identity from other node
 		logger.Infof("requesting [%s] identity from [%s]", v.Recipient, v.RecipientNode)
-		recipient, err = ttx.RequestRecipientIdentity(context, rec)
+		recipient, err = ttx.RequestRecipientIdentity(context, rec,
+			token.WithNetwork("mynetwork"),
+			token.WithChannel("settlement"),
+			token.WithNamespace("tokenchaincode"),
+		)
 		if err != nil {
 			return "", errors.Wrapf(err, "failed getting recipient identity from %s", v.RecipientNode)
 		}
@@ -107,7 +116,11 @@ func (v *TransferView) Call(context view.Context) (interface{}, error) {
 	}
 
 	// The sender will select tokens owned by this wallet
-	senderWallet := ttx.GetWallet(context, v.Wallet)
+	senderWallet := ttx.GetWallet(context, v.Wallet,
+		token.WithNetwork("mynetwork"),
+		token.WithChannel("settlement"),
+		token.WithNamespace("tokenchaincode"),
+	)
 	if senderWallet == nil {
 		return "", errors.Errorf("sender wallet [%s] not found", v.Wallet)
 	}
