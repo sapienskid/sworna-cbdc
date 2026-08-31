@@ -25,6 +25,7 @@ volumes:
 services:
   bank-ca:
     image: hyperledger/fabric-ca:1.5.22
+    restart: always
     labels:
       service: hyperledger-fabric
     environment:
@@ -44,6 +45,7 @@ services:
   bank-peer:
     container_name: peer0.${BANK_ORG:?BANK_ORG must be set}.sworna.example.com
     image: hyperledger/fabric-peer:3.1.5
+    restart: always
     labels:
       service: hyperledger-fabric
     environment:

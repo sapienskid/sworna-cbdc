@@ -191,7 +191,7 @@ install_ccaas() {
 
   log_info "starting ${CCAAS_PEERNAME}_${CC_NAME}_ccaas chaincode container"
   docker rm -f "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" >/dev/null 2>&1 || true
-  docker run --rm -d --name "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" --network fabric_test \
+  docker run --restart always -d --name "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" --network fabric_test \
     -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:${CCAAS_SERVER_PORT} \
     -e CHAINCODE_ID="$PACKAGE_ID" -e CORE_CHAINCODE_ID_NAME="$PACKAGE_ID" \
     "${CC_NAME}_ccaas_image:latest"
