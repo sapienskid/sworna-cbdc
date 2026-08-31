@@ -181,7 +181,7 @@ def create_account(
 @router.get("/accounts/{account_number}", response_model=AccountRead)
 def get_account(
     account_number: str,
-    user: User = Depends(bank_staff),
+    user: User = Depends(customer),
     session: Session = Depends(get_session),
 ):
     account = session.scalar(select(Account).where(Account.account_number == account_number))
@@ -189,6 +189,8 @@ def get_account(
         raise HTTPException(404, f"account '{account_number}' not found")
     if user.role == "bank_staff" and account.bank_code != user.bank_code:
         raise HTTPException(403, "account is not on your bank")
+    if user.role == "customer" and user.account_number != account_number:
+        raise HTTPException(403, "not your account")
     return account
 
 

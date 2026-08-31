@@ -45,7 +45,7 @@ def seed_bank_db(session: Session, bank_code: str = "001", bank_name: str = "ban
     bank = session.scalar(select(Bank).where(Bank.code == bank_code))
     if not bank:
         pool_size = 10
-        free_wallets = [f"pool_{bank_code}_w{i}" for i in range(1, pool_size + 1)]
+        free_wallets = [f"pool_{bank_code}_w{i}" for i in range(2, pool_size + 1)]
         session.add(
             Bank(
                 code=bank_code,
