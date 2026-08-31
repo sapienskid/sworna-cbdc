@@ -149,7 +149,7 @@ fetch_and_join() {
   log_info "fetching genesis block for channel '${CHANNEL}' from the CB orderer"
   local block="$NETWORK/channel-artifacts/${CHANNEL}.block"
   mkdir -p "$NETWORK/channel-artifacts"
-  peer channel fetch oldest "$block" \
+  peer channel fetch 0 "$block" -c "$CHANNEL" \
     -o orderer.sworna.example.com:7050 --ordererTLSHostnameOverride orderer.sworna.example.com \
     --tls --cafile "$ORDERER_CA"
   log_info "joining peer0.${BANK_ORG} to '${CHANNEL}'"
