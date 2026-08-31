@@ -45,3 +45,23 @@ app.include_router(admin.router)
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
+
+
+# Serve production web UI if built
+from .paths import REPO_ROOT
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+DIST_DIR = REPO_ROOT / "web" / "dist"
+if (DIST_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
+
+if DIST_DIR.exists():
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api/") or full_path == "api":
+            return {"detail": "Not Found"}
+        target = DIST_DIR / full_path
+        if target.is_file():
+            return FileResponse(target)
+        return FileResponse(DIST_DIR / "index.html")
