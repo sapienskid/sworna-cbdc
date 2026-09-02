@@ -13,10 +13,31 @@ Env:
   SWORNA_OWNER_<NAME>_HOST  bank VM IP for each owner (e.g. SWORNA_OWNER_OWNER1_HOST)
 """
 import os
+import socket
 import sys
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "cb"
 OUT = sys.argv[2] if len(sys.argv) > 2 else ""
+
+
+def detect_cb_ip() -> str:
+    """Best-effort IP of this host that other VMs can reach.
+
+    Set SWORNA_CB_HOST explicitly (e.g. the Tailscale IP) when the default
+    route interface is not the one the banks use.
+    """
+    ip = os.environ.get("SWORNA_CB_HOST")
+    if ip:
+        return ip
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))  # no packets sent; picks the route src
+        return s.getsockname()[0]
+    except OSError:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return "127.0.0.1"
 
 owners = [o for o in os.environ.get("SWORNA_OWNERS", "").split() if o]
 
@@ -52,11 +73,12 @@ if MODE == "cb":
             # Map owner1 -> bank1, owner2 -> bank2
             k = o.removeprefix("owner")
             hosts.append(f"peer0.bank{k}.sworna.example.com:{ip}")
+    cb_ip = detect_cb_ip()
     hosts.extend([
-        "orderer.sworna.example.com:100.72.112.29",
-        "peer0.centralbank.sworna.example.com:100.72.112.29",
-        "auditor.sworna.example.com:100.72.112.29",
-        "issuer.sworna.example.com:100.72.112.29",
+        f"orderer.sworna.example.com:{cb_ip}",
+        f"peer0.centralbank.sworna.example.com:{cb_ip}",
+        f"auditor.sworna.example.com:{cb_ip}",
+        f"issuer.sworna.example.com:{cb_ip}",
     ])
     body = render({"auditor": hosts, "issuer": hosts})
 else:

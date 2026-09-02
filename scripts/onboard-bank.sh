@@ -28,6 +28,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NETWORK="$ROOT/network"
 cd "$NETWORK"
 export PATH="$ROOT/bin:$PATH"
+. "$ROOT/scripts/bank-hosts.sh"      # owner->host registry fallback
+load_bank_hosts
 export FABRIC_CFG_PATH="$ROOT/config"
 export TEST_NETWORK_HOME="$NETWORK"
 

@@ -19,6 +19,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="$ROOT/bin:$PATH"
 export FABRIC_CFG_PATH="$ROOT/config"
+. "$ROOT/scripts/bank-hosts.sh"      # owner->host registry fallback
+load_bank_hosts
 
 PROVISION=0
 for arg in "$@"; do
@@ -112,11 +114,12 @@ echo "  portal   http://localhost:5173   (login: cbadmin / sworna-cb)"
 echo "  backend  http://localhost:8000/docs"
 echo "  engine   http://localhost:8080"
 echo
-echo "Onboard a bank (while this host stays up):"
-echo "  1. create it:      POST /api/v1/banks  (code, name, msp_id=Bank{k}MSP, owner_node=owner{k}, staff_username)"
-echo "  2. provision:      POST /api/v1/admin/banks/<code>/provision  -> mints wallets + owner identity"
-echo "  3. bundle:         ./scripts/export-join-bundles.sh -> dist-bank-bundles/bank<CODE>.tar.gz -> bank VM"
-echo "  4. bank VM:        ./scripts/deploy-bank.sh <CODE>  -> produces bank{k}-org.json"
-echo "  5. here:           ./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json   (live, no downtime)"
-echo "  6. bank VM:        ./scripts/deploy-bank.sh <CODE> again  -> joins + starts owner/portal"
-echo "  7. here:           ./scripts/commit-chaincode.sh"
+echo "Onboard a bank in ONE step (while this host stays up):"
+echo
+echo "  ./scripts/add-bank.sh <CODE>                 # bank on this VM (all-in-one demo)"
+echo "  ./scripts/add-bank.sh <CODE> <BANK-VM-IP>    # bank on its own VM (driven over SSH)"
+echo
+echo "  That registers, provisions, syncs the repo, runs the bank's identity,"
+echo "  admits it to the channel, joins + starts its services and commits the"
+echo "  chaincode. Idempotent — re-run to resume. (The manual step-by-step path"
+echo "  is documented in docs/SETUP.md §5-6.)"

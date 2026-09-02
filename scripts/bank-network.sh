@@ -20,6 +20,8 @@ NETWORK="$ROOT/network"
 cd "$NETWORK"
 export PATH="$ROOT/bin:$PATH"
 export FABRIC_CFG_PATH="$ROOT/config"
+. "$ROOT/scripts/bank-hosts.sh"      # owner->host registry fallback
+load_bank_hosts
 
 MODE="${1:-up}"
 CHANNEL=settlement
@@ -29,6 +31,7 @@ CC_SEQUENCE="${CC_SEQUENCE:-1}"
 CCAAS_SERVER_PORT=9999
 
 BANK_CODE="${BANK_CODE:?BANK_CODE (e.g. 001) must be set}"
+ORDERER_ADDR="${SWORNA_ORDERER_ADDR:-orderer.sworna.example.com:7050}"
 k=$((10#$BANK_CODE))                     # 1-based bank index
 OWNER_NODE="owner${k}"
 BANK_ORG="bank${k}"
@@ -150,7 +153,7 @@ fetch_and_join() {
   local block="$NETWORK/channel-artifacts/${CHANNEL}.block"
   mkdir -p "$NETWORK/channel-artifacts"
   peer channel fetch 0 "$block" -c "$CHANNEL" \
-    -o orderer.sworna.example.com:7050 --ordererTLSHostnameOverride orderer.sworna.example.com \
+    -o "$ORDERER_ADDR" --ordererTLSHostnameOverride orderer.sworna.example.com \
     --tls --cafile "$ORDERER_CA"
   log_info "joining peer0.${BANK_ORG} to '${CHANNEL}'"
   peer channel join -b "$block"
@@ -184,7 +187,7 @@ install_ccaas() {
   fi
 
   log_info "approving the chaincode definition for ${BANK_MSP}"
-  peer lifecycle chaincode approveformyorg -o orderer.sworna.example.com:7050 \
+  peer lifecycle chaincode approveformyorg -o "$ORDERER_ADDR" \
     --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
     --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
     --package-id "$PACKAGE_ID" --init-required
