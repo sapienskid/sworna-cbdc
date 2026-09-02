@@ -1,9 +1,14 @@
-"""Central-bank admin endpoints: issue, provisioning, supply, circulation, ledger."""
+"""Central-bank admin endpoints: issue, provisioning, supply, circulation, ledger,
+AML compliance and the zk-crypto parameter surface."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
+import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 import httpx
@@ -12,21 +17,29 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import aml
 from ..amounts import to_minor, to_swr
 from ..database import get_session
 from ..deps import cb_admin, cb_audit, cb_mint, cb_staff
-from ..models import Account, Bank, TransactionLog, User
-from ..paths import BIN, FABRIC_CFG, NETWORK_HOME
+from ..models import Account, AMLAlert, Bank, TransactionLog, User, WatchlistEntry
+from ..paths import BIN, FABRIC_CFG, NETWORK_HOME, TOKEN_SERVICES
 from ..provisioning import ProvisioningError, provision_wallet_pool
 from ..schemas import (
     AdminOverview,
+    AMLAlertRead,
+    AMLAlertUpdate,
+    AMLSummary,
     AllocateBankRequest,
     BurnFromBankRequest,
     CBUserCreate,
     CirculationRow,
+    CryptoParams,
     IssueRequest,
     TxLogRead,
     UserRead,
+    WalletCryptoInfo,
+    WatchlistEntryCreate,
+    WatchlistEntryRead,
 )
 from ..token_client import TokenServiceError, token_client
 
@@ -74,6 +87,40 @@ def _peer_env() -> dict:
         ),
     }
     return env
+
+
+@router.post("/admin/banks/{code}/provision", response_model=ProvisionResult)
+def provision_bank(
+    code: str,
+    user: User = Depends(cb_admin),
+    session: Session = Depends(get_session),
+):
+    """Mint a bank's token-CA identities: the owner node FSC identity plus its
+    idemix pool wallets (`pool_<code>_w1..wN`). Idempotent — only missing
+    identities are created."""
+    bank = session.scalar(select(Bank).where(Bank.code == code))
+    if bank is None:
+        raise HTTPException(404, f"bank '{code}' not found")
+
+    before_used = len(bank.wallet_pool.get("used", []))
+    before_free = len(bank.wallet_pool.get("free", []))
+    try:
+        provision_wallet_pool(bank)
+    except ProvisioningError as exc:
+        raise HTTPException(502, f"provisioning failed: {exc}") from exc
+    session.commit()
+    session.refresh(bank)
+
+    used = len(bank.wallet_pool.get("used", []))
+    free = len(bank.wallet_pool.get("free", []))
+    return ProvisionResult(
+        bank_code=bank.code,
+        bank_name=bank.name,
+        owner_node=bank.owner_node,
+        wallets_generated=max(0, (used + free) - (before_used + before_free)),
+        used=used,
+        free=free,
+    )
 
 
 @router.post("/admin/mint", response_model=TxLogRead, status_code=201)
@@ -137,7 +184,7 @@ async def mint_to_bank(
 
     log = TransactionLog(
         txid=txid,
-        tx_type="mint",
+        tx_type="issue",
         from_account="CENTRAL_BANK",
         to_account=to_label,
         amount_minor=amount_minor,
@@ -275,9 +322,11 @@ async def overview(user: User = Depends(cb_admin), session: Session = Depends(ge
     banks = session.scalars(select(Bank).order_by(Bank.code)).all()
     rows: list[CirculationRow] = []
     total_minor = 0
+    unreachable = 0
     for bank in banks:
         bank_minor = 0
-        
+        bank_errors = 0
+
         # 1. Master Reserve Vault (pool_{code}_w1)
         reserve_wallet = f"pool_{bank.code}_w1"
         try:
@@ -285,7 +334,7 @@ async def overview(user: User = Depends(cb_admin), session: Session = Depends(ge
                 wallet=reserve_wallet, node=bank.owner_node
             )
         except (TokenServiceError, httpx.HTTPError):
-            pass
+            bank_errors += 1
 
         # 2. Retail Customer Wallets
         accounts = session.scalars(select(Account).where(Account.bank_id == bank.id)).all()
@@ -297,8 +346,10 @@ async def overview(user: User = Depends(cb_admin), session: Session = Depends(ge
                     wallet=account.wallet, node=bank.owner_node
                 )
             except (TokenServiceError, httpx.HTTPError):
+                bank_errors += 1
                 continue
         total_minor += bank_minor
+        unreachable += bank_errors
         rows.append(
             CirculationRow(
                 bank_code=bank.code,
@@ -307,9 +358,14 @@ async def overview(user: User = Depends(cb_admin), session: Session = Depends(ge
                 total_minor=bank_minor,
                 total=to_swr(bank_minor),
                 account_count=len(accounts),
+                wallet_errors=bank_errors,
             )
         )
-    return AdminOverview(total_supply=to_swr(total_minor), circulation=rows)
+    return AdminOverview(
+        total_supply=to_swr(total_minor),
+        circulation=rows,
+        wallets_unreachable=unreachable,
+    )
 
 
 @router.get("/admin/ledger", response_model=LedgerStatus)
@@ -334,34 +390,250 @@ def ledger_status(limit: int = 5, user: User = Depends(cb_admin)):
     blocks: list[BlockSummary] = []
     start = max(0, height - limit)
     for num in range(start, max(height, 1)):
-        fetch = subprocess.run(
-            [
-                "peer", "channel", "fetch", str(num), "-o", "localhost:7050",
-                "--ordererTLSHostnameOverride", "orderer.sworna.example.com",
-                "--tls", "--cafile", env["ORDERER_CA"], "-c", channel, "/tmp/sworna-blk.block",
-            ],
-            capture_output=True, text=True, env=env, timeout=30,
-        )
-        if fetch.returncode != 0:
-            continue
-        decoded = subprocess.run(
-            ["configtxlator", "proto_decode", "--type", "common.Block",
-             "--input", "/tmp/sworna-blk.block", "--output", "/tmp/sworna-blk.json"],
-            capture_output=True, text=True, env=env, timeout=30,
-        )
-        if decoded.returncode != 0:
-            continue
+        # Unique temp files per block/request — concurrent callers must not
+        # clobber each other's fetches.
+        fd, blk_path = tempfile.mkstemp(prefix=f"sworna-blk-{num}-", suffix=".block")
+        os.close(fd)
+        json_path = blk_path + ".json"
         try:
-            data = json.loads(Path("/tmp/sworna-blk.json").read_text())
-            txs = data.get("data", {}).get("data", [])
-            txids = []
-            for tx in txs:
-                ch = tx.get("payload", {}).get("header", {}).get("channel_header", {})
-                tid = ch.get("tx_id", "")
-                if tid:
-                    txids.append(tid)
-            blocks.append(BlockSummary(number=num, tx_count=len(txs), txids=txids))
-        except (json.JSONDecodeError, KeyError):
-            continue
+            fetch = subprocess.run(
+                [
+                    "peer", "channel", "fetch", str(num), "-o", "localhost:7050",
+                    "--ordererTLSHostnameOverride", "orderer.sworna.example.com",
+                    "--tls", "--cafile", env["ORDERER_CA"], "-c", channel, blk_path,
+                ],
+                capture_output=True, text=True, env=env, timeout=30,
+            )
+            if fetch.returncode != 0:
+                continue
+            decoded = subprocess.run(
+                ["configtxlator", "proto_decode", "--type", "common.Block",
+                 "--input", blk_path, "--output", json_path],
+                capture_output=True, text=True, env=env, timeout=30,
+            )
+            if decoded.returncode != 0:
+                continue
+            try:
+                data = json.loads(Path(json_path).read_text())
+                txs = data.get("data", {}).get("data", [])
+                txids = []
+                for tx in txs:
+                    ch = tx.get("payload", {}).get("header", {}).get("channel_header", {})
+                    tid = ch.get("tx_id", "")
+                    if tid:
+                        txids.append(tid)
+                blocks.append(BlockSummary(number=num, tx_count=len(txs), txids=txids))
+            except (json.JSONDecodeError, KeyError):
+                continue
+        finally:
+            for p in (blk_path, json_path):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
 
     return LedgerStatus(channel=channel, height=height, blocks=blocks)
+
+# -- AML / compliance -------------------------------------------------------
+@router.get("/admin/aml/alerts", response_model=list[AMLAlertRead])
+def list_aml_alerts(
+    status: str = "",
+    severity: str = "",
+    bank_code: str = "",
+    limit: int = 100,
+    user: User = Depends(cb_staff),
+    session: Session = Depends(get_session),
+):
+    stmt = select(AMLAlert).order_by(AMLAlert.id.desc()).limit(max(1, min(limit, 500)))
+    if status:
+        stmt = stmt.where(AMLAlert.status == status)
+    if severity:
+        stmt = stmt.where(AMLAlert.severity == severity)
+    if bank_code:
+        stmt = stmt.where(AMLAlert.bank_code == bank_code)
+    return session.scalars(stmt).all()
+
+
+@router.patch("/admin/aml/alerts/{alert_id}", response_model=AMLAlertRead)
+def review_aml_alert(
+    alert_id: int,
+    body: AMLAlertUpdate,
+    user: User = Depends(cb_audit),
+    session: Session = Depends(get_session),
+):
+    alert = session.get(AMLAlert, alert_id)
+    if alert is None:
+        raise HTTPException(404, "alert not found")
+    alert.status = body.status
+    alert.reviewed_by = user.username
+    from ..models import utcnow
+
+    alert.reviewed_at = utcnow()
+    if body.note:
+        alert.details = f"{alert.details} | review note: {body.note}"[:500]
+    session.commit()
+    session.refresh(alert)
+    return alert
+
+
+@router.get("/admin/aml/summary", response_model=AMLSummary)
+def aml_summary(user: User = Depends(cb_staff), session: Session = Depends(get_session)):
+    open_by_severity = {
+        sev: session.scalar(
+            select(func.count())
+            .select_from(AMLAlert)
+            .where(AMLAlert.status == "open", AMLAlert.severity == sev)
+        ) or 0
+        for sev in ("low", "medium", "high")
+    }
+    tier_table = {
+        f"tier_{level}": {
+            "label": tier.label,
+            "per_tx_minor": tier.per_tx_minor,
+            "daily_minor": tier.daily_minor,
+            "daily_count": tier.daily_count,
+        }
+        for level, tier in aml.KYC_TIERS.items()
+    }
+    return AMLSummary(
+        open_alerts=sum(open_by_severity.values()),
+        open_by_severity=open_by_severity,
+        flagged_accounts=session.scalar(
+            select(func.count()).select_from(Account).where(Account.status == "flagged")
+        ) or 0,
+        watchlist_entries=session.scalar(
+            select(func.count()).select_from(WatchlistEntry).where(WatchlistEntry.active)
+        ) or 0,
+        reportable_threshold=to_swr(aml.REPORTABLE_THRESHOLD_MINOR),
+        kyc_tiers=tier_table,
+    )
+
+
+@router.get("/admin/aml/watchlist", response_model=list[WatchlistEntryRead])
+def list_watchlist(user: User = Depends(cb_staff), session: Session = Depends(get_session)):
+    return session.scalars(select(WatchlistEntry).order_by(WatchlistEntry.id.desc())).all()
+
+
+@router.post("/admin/aml/watchlist", response_model=WatchlistEntryRead, status_code=201)
+def add_watchlist_entry(
+    body: WatchlistEntryCreate,
+    user: User = Depends(cb_audit),
+    session: Session = Depends(get_session),
+):
+    entry = WatchlistEntry(
+        list_type=body.list_type,
+        value=body.value,
+        note=body.note,
+        created_by=user.username,
+    )
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+    return entry
+
+
+@router.delete("/admin/aml/watchlist/{entry_id}", status_code=204)
+def deactivate_watchlist_entry(
+    entry_id: int,
+    user: User = Depends(cb_audit),
+    session: Session = Depends(get_session),
+):
+    entry = session.get(WatchlistEntry, entry_id)
+    if entry is None:
+        raise HTTPException(404, "watchlist entry not found")
+    entry.active = False
+    session.commit()
+
+
+# -- zk-crypto parameter surface (privacy & cryptography page) ---------------
+PUBLIC_PARAMS_FILE = Path(TOKEN_SERVICES) / "tokenchaincode" / "zkatdlog_pp.json"
+
+
+def _fingerprint(data: bytes | str) -> str:
+    if isinstance(data, str):
+        data = data.encode()
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def _load_public_params() -> dict:
+    """Load zkatdlog_pp.json; raise 503 with a clear message when missing/bad."""
+    if not PUBLIC_PARAMS_FILE.exists():
+        raise HTTPException(503, f"public params not found at {PUBLIC_PARAMS_FILE}")
+    try:
+        return json.loads(PUBLIC_PARAMS_FILE.read_text())
+    except json.JSONDecodeError as exc:
+        raise HTTPException(503, f"public params file is not valid JSON: {exc}") from exc
+
+
+@router.get("/admin/crypto/params", response_model=CryptoParams)
+def crypto_params(user: User = Depends(cb_staff)):
+    """Public parameters of the zero-knowledge token layer.
+
+    These are the exact values baked into the token chaincode at setup time:
+    Pedersen generators, the ZKAT range-proof parameters, the issuer public
+    keys, the Idemix issuer (blind-signature) public key and the auditor's
+    de-blinding public key. Regenerating them invalidates every token.
+    """
+    outer = _load_public_params()
+    inner = json.loads(base64.b64decode(outer["Raw"]))
+    auditor_blob = base64.b64decode(inner["Auditor"])
+    pem = re.search(
+        rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+        auditor_blob, re.DOTALL,
+    )
+    msp_id = ""
+    # auditor blob is a protobuf message: field 1 (0x0a) is the MSP ID string
+    if len(auditor_blob) > 2 and auditor_blob[0] == 0x0A:
+        n = auditor_blob[1]
+        msp_id = auditor_blob[2 : 2 + n].decode(errors="replace")
+    range_proof = inner.get("RangeProofParams", {})
+    return CryptoParams(
+        identifier=inner.get("Label", outer.get("Identifier", "")),
+        curve_id=inner.get("Curve", 0),
+        idemix_curve_id=inner.get("IdemixCurveID", 0),
+        quantity_precision=inner.get("QuantityPrecision", 0),
+        max_token=inner.get("MaxToken", 0),
+        range_proof={
+            "exponent": range_proof.get("Exponent"),
+            "base": len(range_proof.get("SignedValues", [])),
+        },
+        issuers=len(inner.get("Issuers", [])),
+        idemix_issuer_pk_fingerprint=_fingerprint(inner["IdemixIssuerPK"]),
+        auditor={
+            "msp_id": msp_id,
+            "cert_fingerprint": _fingerprint(pem.group(0)) if pem else "",
+        },
+        pedersen_generators_fingerprint=_fingerprint(
+            json.dumps({"gen": inner["PedGen"], "params": inner["PedParams"]}, sort_keys=True)
+        ),
+        params_file=str(PUBLIC_PARAMS_FILE),
+        params_valid=True,
+    )
+
+
+@router.get("/admin/crypto/wallets", response_model=list[WalletCryptoInfo])
+def crypto_wallets(
+    user: User = Depends(cb_staff), session: Session = Depends(get_session)
+):
+    """Per-account idemix wallet fingerprints.
+
+    Each wallet holds an Idemix credential — a Camenisch-Lysyanskaya blind
+    signature issued by the token CA over the user's secret. On-chain the
+    wallet only ever reveals one-time pseudonyms derived from that credential,
+    never the credential itself.
+    """
+    accounts = session.scalars(select(Account).order_by(Account.id)).all()
+    out = []
+    for acc in accounts:
+        signer = Path(TOKEN_SERVICES) / "keys" / acc.owner_node / "wallet" / acc.wallet / "msp" / "user" / "SignerConfig"
+        fingerprint = _fingerprint(signer.read_bytes()) if signer.exists() else None
+        out.append(
+            WalletCryptoInfo(
+                account_number=acc.account_number,
+                full_name=acc.full_name,
+                wallet=acc.wallet,
+                key_type="idemix (CL blind-signature credential)",
+                credential_fingerprint=fingerprint,
+            )
+        )
+    return out

@@ -115,3 +115,47 @@ class TransactionLog(Base):
         from .amounts import to_swr
 
         return to_swr(self.amount_minor)
+
+
+class WatchlistEntry(Base):
+    """AML screening list entry (sanctions / PEP / internal watchlist).
+
+    `value` is matched case-insensitively against customer full names at
+    onboarding and against both transfer counterparties at payment time.
+    """
+
+    __tablename__ = "aml_watchlist"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    list_type: Mapped[str] = mapped_column(String(20))  # sanction | pep | internal
+    value: Mapped[str] = mapped_column(String(120), index=True)
+    note: Mapped[str] = mapped_column(String(255), default="")
+    active: Mapped[bool] = mapped_column(default=True)
+    created_by: Mapped[str] = mapped_column(String(50), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AMLAlert(Base):
+    """An AML rule hit, raised for central-bank compliance review."""
+
+    __tablename__ = "aml_alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule: Mapped[str] = mapped_column(String(40))  # large_transaction | velocity | structuring | watchlist
+    severity: Mapped[str] = mapped_column(String(10))  # low | medium | high
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | reviewed | dismissed
+    account_number: Mapped[str] = mapped_column(String(20), default="", index=True)
+    bank_code: Mapped[str] = mapped_column(String(3), default="", index=True)
+    counterparty: Mapped[str] = mapped_column(String(20), default="")
+    txid: Mapped[str] = mapped_column(String(100), default="")
+    amount_minor: Mapped[int] = mapped_column(Integer, default=0)
+    details: Mapped[str] = mapped_column(String(500), default="")
+    reviewed_by: Mapped[str] = mapped_column(String(50), default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    @property
+    def amount(self):
+        from .amounts import to_swr
+
+        return to_swr(self.amount_minor)

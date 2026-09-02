@@ -6,9 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..accounts import generate_account_number
+from .. import aml
 from ..amounts import to_swr
 from ..database import get_session
-from ..deps import bank_staff, cb_admin, customer
+from ..deps import bank_staff, cb_admin, customer, is_bank_user
 from ..models import Account, Bank, User
 from ..provisioning import ProvisioningError, assign_wallet
 from ..schemas import (
@@ -33,7 +34,7 @@ router = APIRouter(prefix="/api/v1", tags=["registry"])
 @router.get("/banks", response_model=list[BankRead])
 def list_banks(user: User = Depends(bank_staff), session: Session = Depends(get_session)):
     stmt = select(Bank).order_by(Bank.id)
-    if user.role == "bank_staff":
+    if is_bank_user(user):
         stmt = stmt.where(Bank.code == user.bank_code)
     return session.scalars(stmt).all()
 
@@ -117,7 +118,7 @@ def set_bank_permissions(
 # -- accounts ------------------------------------------------------------
 def _scoped_accounts(user: User, session: Session):
     stmt = select(Account).order_by(Account.id)
-    if user.role == "bank_staff":
+    if is_bank_user(user):
         stmt = stmt.join(Bank).where(Bank.code == user.bank_code)
     elif user.role == "customer":
         stmt = stmt.where(Account.account_number == user.account_number)
@@ -129,15 +130,52 @@ def list_accounts(user: User = Depends(bank_staff), session: Session = Depends(g
     return session.scalars(_scoped_accounts(user, session)).all()
 
 
+@router.get("/accounts/balances")
+async def account_balances(
+    user: User = Depends(bank_staff), session: Session = Depends(get_session)
+):
+    """Batch on-ledger balances for the scoped accounts (avoids N+1 polling)."""
+    accounts = session.scalars(_scoped_accounts(user, session)).all()
+    out: list[dict] = []
+    for acc in accounts:
+        try:
+            minor = await token_client.balances(wallet=acc.wallet, node=acc.owner_node)
+            balance = str(to_swr(minor))
+        except TokenServiceError:
+            balance = ""
+        out.append({"account_number": acc.account_number, "balance": balance})
+    return out
+
+
 @router.post("/accounts", response_model=AccountRead, status_code=201)
 def create_account(
     body: AccountCreate,
     user: User = Depends(bank_staff),
     session: Session = Depends(get_session),
 ):
-    bank = session.scalar(select(Bank).where(Bank.code == user.bank_code))
+    # Lock the bank row so concurrent onboardings cannot draw the same wallet
+    # or race on the account-number sequence.
+    bank = session.scalar(
+        select(Bank).where(Bank.code == user.bank_code).with_for_update()
+    )
     if bank is None:
         raise HTTPException(404, "bank not found")
+    if bank.status == "suspended":
+        raise HTTPException(403, f"bank {bank.name} is suspended; onboarding refused")
+
+    # AML screening: sanctions match refuses onboarding, PEP/internal match
+    # opens the account in `flagged` state with an alert for compliance.
+    screening = aml.screen_onboarding(session, body.full_name)
+    if screening == "blocked":
+        aml.create_alert(
+            session,
+            rule="watchlist",
+            severity="high",
+            account=None,
+            details=f"onboarding refused: '{body.full_name}' matches the sanctions watchlist",
+        )
+        session.commit()
+        raise HTTPException(403, "customer name matches the sanctions watchlist")
 
     if session.scalar(select(User).where(User.username == body.username)):
         raise HTTPException(409, f"username '{body.username}' taken")
@@ -161,6 +199,7 @@ def create_account(
         bank_id=bank.id,
         kyc_level=body.kyc_level,
         transfer_limit_minor=int(body.transfer_limit * 100),
+        status="flagged" if screening == "flagged" else "active",
     )
     session.add(account)
     session.flush()
@@ -173,6 +212,14 @@ def create_account(
             account_number=account.account_number,
         )
     )
+    if screening == "flagged":
+        aml.create_alert(
+            session,
+            rule="watchlist",
+            severity="medium",
+            account=account,
+            details="account opened in flagged state: name matches a PEP/internal watchlist entry",
+        )
     session.commit()
     session.refresh(account)
     return account
@@ -187,7 +234,7 @@ def get_account(
     account = session.scalar(select(Account).where(Account.account_number == account_number))
     if account is None:
         raise HTTPException(404, f"account '{account_number}' not found")
-    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+    if is_bank_user(user) and account.bank_code != user.bank_code:
         raise HTTPException(403, "account is not on your bank")
     if user.role == "customer" and user.account_number != account_number:
         raise HTTPException(403, "not your account")
@@ -204,7 +251,7 @@ def set_account_status(
     account = session.scalar(select(Account).where(Account.account_number == account_number))
     if account is None:
         raise HTTPException(404, "account not found")
-    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+    if is_bank_user(user) and account.bank_code != user.bank_code:
         raise HTTPException(403, "account is not on your bank")
     account.status = body.status
     session.commit()
@@ -221,7 +268,7 @@ async def account_balance(
     account = session.scalar(select(Account).where(Account.account_number == account_number))
     if account is None:
         raise HTTPException(404, f"account '{account_number}' not found")
-    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+    if is_bank_user(user) and account.bank_code != user.bank_code:
         raise HTTPException(403, "account is not on your bank")
     if user.role == "customer" and user.account_number != account_number:
         raise HTTPException(403, "not your account")
@@ -246,7 +293,7 @@ async def account_statements(
     account = session.scalar(select(Account).where(Account.account_number == account_number))
     if account is None:
         raise HTTPException(404, f"account '{account_number}' not found")
-    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+    if is_bank_user(user) and account.bank_code != user.bank_code:
         raise HTTPException(403, "account is not on your bank")
     if user.role == "customer" and user.account_number != account_number:
         raise HTTPException(403, "not your account")
@@ -314,8 +361,10 @@ async def deposit_to_account(
     account = session.scalar(select(Account).where(Account.account_number == body.account_number))
     if account is None:
         raise HTTPException(404, f"account '{body.account_number}' not found")
-    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+    if is_bank_user(user) and account.bank_code != user.bank_code:
         raise HTTPException(403, "account is not on your bank")
+    if account.bank.status == "suspended":
+        raise HTTPException(403, f"bank {account.bank.name} is suspended; deposit refused")
     if account.status != "active":
         raise HTTPException(403, f"account {account.account_number} is {account.status}")
 
@@ -361,10 +410,12 @@ async def withdraw_from_account(
     account = session.scalar(select(Account).where(Account.account_number == body.account_number))
     if account is None:
         raise HTTPException(404, f"account '{body.account_number}' not found")
-    if user.role == "bank_staff" and account.bank_code != user.bank_code:
+    if is_bank_user(user) and account.bank_code != user.bank_code:
         raise HTTPException(403, "account is not on your bank")
     if user.role == "customer" and user.account_number != body.account_number:
         raise HTTPException(403, "not your account")
+    if account.bank.status == "suspended":
+        raise HTTPException(403, f"bank {account.bank.name} is suspended; withdrawal refused")
     if account.status != "active":
         raise HTTPException(403, f"account {account.account_number} is {account.status}")
 
@@ -372,6 +423,9 @@ async def withdraw_from_account(
     reserve_wallet = f"pool_{bank.code}_w1"
     from ..amounts import to_minor
     amount_minor = to_minor(body.amount)
+
+    # Cash-out is an outflow from the customer wallet: same AML gates as transfers.
+    aml.enforce_outflow(session, account, amount_minor)
 
     try:
         txid = await token_client.transfer(
@@ -395,6 +449,8 @@ async def withdraw_from_account(
         reference=body.reference or "Cash-Out Withdrawal",
     )
     session.add(log)
+    session.flush()
+    aml.post_outflow_checks(session, account, None, amount_minor, txid)
     session.commit()
     session.refresh(log)
     return log

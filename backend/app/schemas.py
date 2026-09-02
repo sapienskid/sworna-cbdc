@@ -162,11 +162,85 @@ class CirculationRow(BaseModel):
     total_minor: int
     total: Decimal
     account_count: int
+    wallet_errors: int = 0
 
 
 class AdminOverview(BaseModel):
     total_supply: Decimal
     circulation: list[CirculationRow]
+    wallets_unreachable: int = 0
+
+
+# AML / compliance
+class AMLAlertRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    rule: str
+    severity: str
+    status: str
+    account_number: str
+    bank_code: str
+    counterparty: str
+    txid: str
+    amount: Decimal
+    details: str
+    reviewed_by: str
+    reviewed_at: datetime | None
+    created_at: datetime
+
+
+class AMLAlertUpdate(BaseModel):
+    status: Literal["open", "reviewed", "dismissed"]
+    note: str = ""
+
+
+class AMLSummary(BaseModel):
+    open_alerts: int
+    open_by_severity: dict[str, int]
+    flagged_accounts: int
+    watchlist_entries: int
+    reportable_threshold: Decimal
+    kyc_tiers: dict[str, dict]
+
+
+class WatchlistEntryCreate(BaseModel):
+    list_type: Literal["sanction", "pep", "internal"]
+    value: str = Field(min_length=2, max_length=120)
+    note: str = ""
+
+
+class WatchlistEntryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    list_type: str
+    value: str
+    note: str
+    active: bool
+    created_by: str
+    created_at: datetime
+
+
+class CryptoParams(BaseModel):
+    identifier: str
+    curve_id: int
+    idemix_curve_id: int
+    quantity_precision: int
+    max_token: int
+    range_proof: dict
+    issuers: int
+    idemix_issuer_pk_fingerprint: str
+    auditor: dict
+    pedersen_generators_fingerprint: str
+    params_file: str
+    params_valid: bool
+
+
+class WalletCryptoInfo(BaseModel):
+    account_number: str
+    full_name: str
+    wallet: str
+    key_type: str
+    credential_fingerprint: str | None = None
 
 
 # auth

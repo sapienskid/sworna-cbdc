@@ -1,6 +1,7 @@
 """Sworna CBDC banking backend (FastAPI)."""
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -29,9 +30,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = [
+    o.strip() for o in os.getenv("SWORNA_CORS_ORIGINS", "*").split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # dev only; tighten for the lab demo
+    allow_origins=_cors_origins,  # comma-separated origins via SWORNA_CORS_ORIGINS
     allow_methods=["*"],
     allow_headers=["*"],
 )

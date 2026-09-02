@@ -42,3 +42,19 @@ cb_audit = require_roles("cb_admin", "cb_auditor")
 cb_staff = require_roles("cb_admin", "cb_mint_officer", "cb_auditor")
 bank_staff = require_roles("cb_admin", "cb_mint_officer", "cb_auditor", "bank_admin", "bank_staff")
 customer = require_roles("cb_admin", "cb_mint_officer", "cb_auditor", "bank_admin", "bank_staff", "customer")
+
+CB_ROLES = ("cb_admin", "cb_mint_officer", "cb_auditor")
+BANK_ROLES = ("bank_admin", "bank_staff")
+
+
+def is_cb_user(user: User) -> bool:
+    return user.role in CB_ROLES
+
+
+def is_bank_user(user: User) -> bool:
+    """True for bank-portal users that must be scoped to their own bank.
+
+    CB users pass the `bank_staff` dependency as supervisors, but they are
+    never scoped — only bank_admin/bank_staff are.
+    """
+    return user.role in BANK_ROLES and bool(user.bank_code)
