@@ -8,37 +8,13 @@ React UI ──► FastAPI (:8000) ──► Go engine (issuer/auditor :9000/:91
 
 ## Layer 1: FastAPI banking API (`backend/app/routers`)
 
-### Registry (`/api/v1`)
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/banks` | list banks |
-| POST | `/banks` | create bank (name, owner_node) |
-| GET | `/customers` | list customers |
-| POST | `/customers` | create customer (username, full_name, wallet, bank_id) |
-| PATCH | `/customers/{username}/status` | active / flagged / frozen (AML) |
-| GET | `/customers/{username}/balance` | SWR balance (major units, Decimal) |
-| GET | `/customers/{username}/transactions` | history via the auditor's view |
-
-### Payments (`/api/v1`)
-| Method | Path | Notes |
-|---|---|---|
-| POST | `/payments/transfer` | from_wallet, to_wallet, amount(SWR), message — **AML checks**: sender active + within limit |
-| POST | `/payments/redeem` | wallet, amount(SWR), message |
-
-### Admin (`/api/v1`)
-| Method | Path | Notes |
-|---|---|---|
-| POST | `/admin/issue` | recipient_wallet, bank_name, amount(SWR), message |
-| GET | `/admin/transactions` | recent transaction log |
-| GET | `/admin/overview` | total supply + per-bank circulation |
-| GET | `/admin/ledger` | **custom ledger monitor**: channel height + last N blocks (peer CLI + configtxlator) |
-
-### Conventions
-- **Amounts** are `Decimal` in major units of SWR at the API boundary,
-  converted to integer minor units before hitting the engine (`app/amounts.py`).
-- A bank (`code`, `owner_node`) maps to its owner node via the `banks` table;
-  the owner REST URL is derived from the node name (`app/owner_urls.py`,
-  e.g. `owner3` → `http://owner3.sworna.example.com:9400/api/v1`).
+The user-facing FastAPI surface evolves faster than this series. The
+authoritative catalog is **[docs/API.md](../API.md)**; the module walk-through
+is **[docs/BACKEND-INTERNALS.md](../BACKEND-INTERNALS.md)**. In brief:
+`/auth`, `/banks`, `/accounts` (onboarding, balances, statements), `/payments`
+(transfer, redeem), `/bank` (reserve deposit/withdraw), `/admin` (mint,
+allocate, burn, provisioning, ledger, users), `/admin/aml` (alerts,
+watchlist, summary) and `/admin/crypto` (public parameter surface).
 
 ## Layer 2: engine contracts (Go services)
 

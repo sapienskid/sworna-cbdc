@@ -14,6 +14,15 @@ A two-tier Central Bank Digital Currency (CBDC) platform built on Hyperledger Fa
 
 - **[docs/DEMO_AND_UI_GUIDE.md](docs/DEMO_AND_UI_GUIDE.md)**: Browser portal URLs, login credentials, UI field definitions, and step-by-step presentation script.
 - **[docs/SETUP.md](docs/SETUP.md)**: Authoritative operational setup runbook, multi-org onboarding, and troubleshooting.
+- **[docs/README.md](docs/README.md)**: full documentation index, including the deep dives below.
+
+### Deep Dives
+
+- **[docs/BLIND-SIGNATURES-AND-PRIVACY.md](docs/BLIND-SIGNATURES-AND-PRIVACY.md)** — how the blind-signature / zero-knowledge privacy layer works, step by step.
+- **[docs/AML-COMPLIANCE.md](docs/AML-COMPLIANCE.md)** — the AML rule engine: KYC tiers, limits, watchlist screening, alerts.
+- **[docs/BACKEND-INTERNALS.md](docs/BACKEND-INTERNALS.md)** — module-by-module walk-through of the FastAPI banking layer.
+- **[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md)** — trust model, cryptography, auth, and known limitations.
+- **[docs/FRONTEND.md](docs/FRONTEND.md)** — the three-portal React app: architecture and conventions.
 
 ### Web Portals
 
@@ -21,26 +30,30 @@ A two-tier Central Bank Digital Currency (CBDC) platform built on Hyperledger Fa
 - **Bank A Portal:** `http://100.111.120.73:8000` — `bankadmin` / `sworna-bank`
 - **Bank B Portal:** `http://100.71.149.60:8000` — `bankadmin` / `sworna-bank`
 
-### Deploy Order
+### Deploy Order — one step per host
 
 ```
-# 1. Central Bank VM
+# 1. Central Bank VM (network + engine + backend + portal)
 ./scripts/deploy-centralbank.sh --provision
 
-# 2. Bank VM (generates bank-org.json)
-SWORNA_CB_HOST=<CB-IP> ./scripts/deploy-bank.sh 001
+# 2. Add a bank — EVERYTHING else is automated from the CB host:
+./scripts/add-bank.sh 001                 # bank on the CB VM itself (all-in-one demo)
+./scripts/add-bank.sh 001 <BANK-VM-IP>    # bank on its own VM (driven over SSH)
 
-# 3. CB VM (add bank to channel — auto-collects co-sigs from existing banks)
-SWORNA_OWNERS="owner1" SWORNA_OWNER_OWNER1_HOST=<BANK-IP> \
-  ./scripts/onboard-bank.sh Bank1MSP network/bank1-org.json
-
-# 4. Bank VM (join channel + install chaincode + start owner FSC)
-SWORNA_CB_HOST=<CB-IP> SWORNA_OWNERS="owner1" \
-  SWORNA_OWNER_OWNER1_HOST=<BANK-IP> ./scripts/deploy-bank.sh 001
-
-# 5. CB VM (commit chaincode with all banks in policy)
-./scripts/commit-chaincode.sh
+#    ...more banks, same one command:
+./scripts/add-bank.sh 002 <BANK-VM-IP-2>
 ```
+
+`add-bank.sh` registers the bank, provisions its token wallets, syncs the
+repo to the bank VM, runs its identity phase, admits it to the `settlement`
+channel (live), joins + starts its services, commits the chaincode policy and
+verifies. Idempotent — re-run to resume. Options: `--name`, `--pool`,
+`--user`, `--repo-dir`, `--no-sync`, `--skip-portal`, `--dry-run` (see the
+script header). The manual step-by-step equivalent is in
+[docs/SETUP.md](docs/SETUP.md) §5–6.
+
+Prerequisites for the remote mode: SSH key access to the bank VM
+(`ssh-copy-id <user>@<ip>`), docker + docker compose v2 on both hosts.
 
 ## Architecture
 
@@ -83,7 +96,7 @@ All VMs communicate over **Tailscale** (encrypted mesh VPN):
 
 | Layer | Technology |
 |-------|-----------|
-| Blockchain | Hyperledger Fabric 2.x |
+| Blockchain | Hyperledger Fabric v3.1 (BFT ordering) |
 | Token Protocol | Hyperledger Labs Token-SDK (DLOG ZKP) |
 | Smart Contract | Go (CCAAS) |
 | Backend API | Python / FastAPI |

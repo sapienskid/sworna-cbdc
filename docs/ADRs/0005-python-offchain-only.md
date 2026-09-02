@@ -1,6 +1,6 @@
 # ADR-0005: Python is used off-chain only; REST is the boundary
 
-**Status:** Accepted
+**Status:** Accepted — refined by [ADR-0010](0010-own-token-layer.md) (Python keeps owning all business logic; the Go sample was forked, not replaced by Python)
 **Date:** 2026-08-18
 **Applies to:** all phases
 

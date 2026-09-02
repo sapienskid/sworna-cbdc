@@ -1,6 +1,6 @@
 # ADR-0001: Reuse the fabric-samples `token-sdk` for the prototype
 
-**Status:** Accepted
+**Status:** Accepted — superseded **in letter** by [ADR-0010](0010-own-token-layer.md) (the sample was forked into `token-services/` rather than consumed in place); the decision to build on the Token SDK stands
 **Date:** 2026-08-18
 **Applies to:** Phase 1 (docs) → Phase 3 (prototype demo)
 

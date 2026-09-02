@@ -15,6 +15,7 @@
 5. [How to Onboard Customers (Bank Staff Portal)](#5-how-to-onboard-customers-bank-staff-portal)
 6. [Step-by-Step Demo Script for Presentations](#6-step-by-step-demo-script-for-presentations)
 7. [Verified Live Transaction Examples](#7-verified-live-transaction-examples)
+8. [UI Map (2026 redesign)](#8-ui-map-2026-redesign)
 
 ---
 
@@ -43,6 +44,11 @@ All web portals are accessible directly via your web browser on **Port 8000** (o
 | **Bank B Staff** | `bankadmin` | `sworna-bank` | `bank_staff` | `RESERVE-002` | **`20,000.00 SWR`** |
 | **Bank B Customer (Charlie)** | `charlie` | `charlie123` | `customer` | `SWR-002-00000001` | **`5,150.00 SWR`** |
 
+> Passwords are per-deployment values (customer passwords are chosen by bank
+> staff at onboarding; the CB admin bootstrap password is
+> `SWORNA_CB_ADMIN_PASSWORD`). The login screen intentionally shows no
+> credentials — this table is the single source for the demo.
+
 ---
 
 ## 2. Central Bank UI Field Reference
@@ -56,7 +62,8 @@ When logged in as `cbadmin`, the **"All banks on the network"** table displays t
 | **Owner node** | The **Fabric Smart Client (FSC)** node name (`owner1`, `owner2`) running inside the bank's VM. The owner node manages the bank's UTXOs and executes peer-to-peer transfers with counterparty banks. |
 | **Status** | `active` indicates the bank is healthy and permitted to transact. The CB can toggle this to `suspended` to freeze an institution during regulatory actions. |
 | **Joined** | Exact date when the commercial bank was admitted to the `settlement` channel. |
-| **Actions** | Central Bank governance controls to modify interbank limits, redemption privileges, or status. |
+| **Actions** | **Provision keys** (mint the bank's missing token-CA identities: its owner-node FSC identity + Idemix pool wallets — idempotent) and **Permissions** (`can_redeem`, interbank/redeem limits). The **Register bank** button adds a new consortium member to the registry before its VM deployment. |
+| **Status — suspended** | A suspended bank's payments, deposits, withdrawals and onboarding are refused at the API until reactivated. |
 
 ### Why Pre-Provisioned Token Pools Exist (The 10 Wallets)
 In Zero-Knowledge CBDC architectures using **Idemix**, generating a user wallet requires a cryptographic credential issued by the Central Bank Token CA. 
@@ -158,6 +165,23 @@ Follow this flow for an impressive and flawless demonstration:
 
 ---
 
+### **Part 4: AML Compliance Console (2 mins)**
+1. Back in the CB console, open **Supervision → AML Compliance**.
+2. **Showcase:**
+   - **Alert queue:** large-transaction / velocity / structuring hits raised by the rule engine, filterable by severity and status; **Review** or **Dismiss** one live.
+   - **Watchlist:** add a `sanction` entry, then (as bank staff) try onboarding that name → refused; a PEP name → account opens **flagged**.
+   - **KYC tier table:** the live limits that gate every payment.
+   - Full details: `docs/AML-COMPLIANCE.md` (rules fire automatically as payments flow — no manual setup needed).
+
+### **Part 5: Privacy & Cryptography Page (1 min)**
+1. Open **Supervision → Privacy & Cryptography**.
+2. **Showcase:**
+   - **Live public parameters** of the token chaincode (Pedersen generators, range-proof base 300^5, Idemix issuer key, auditor cert — all fingerprinted).
+   - The three one-paragraph explainers: blind signatures, hidden amounts, auditor gate.
+   - Tie it back to §3 above: this page is the *proof*, the explainer is the *story*.
+
+---
+
 ## 7. Verified Live Transaction Examples
 
 All flows below have been executed and cryptographically committed on the multi-node network:
@@ -169,3 +193,42 @@ All flows below have been executed and cryptographically committed on the multi-
 | **Interbank Transfer 1** | Alice (Bank A) | Charlie (Bank B) | `200 SWR` | `ea385293cb7ff291078012234c6123397a893527058ee1bc55bf85f5c78b6dd2` | **Confirmed (Block 43)** |
 | **Interbank Transfer 2** | Alice (Bank A) | Charlie (Bank B) | `50 SWR` | `2ad6803d60df03cc381ea47b277fdec7c79983b67582e3b5e786ab1e4dfcb47d` | **Confirmed (8s)** |
 | **Interbank Return** | Charlie (Bank B) | Alice (Bank A) | `100 SWR` | `f9a11dd977a7f02858c9276364d44505a8afff12313cf22c1f5cf56c5ef3c555` | **Confirmed (8s)** |
+
+## 8. UI Map (2026 redesign)
+
+The UI was rebuilt around URL-based navigation (every tab is a real route —
+deep-linkable and refresh-safe) with a monochrome shadcn design system.
+
+### Central Bank console (`/cb`)
+
+| Section | Page | What it shows |
+|---|---|---|
+| Oversight | Dashboard | M0 supply, bank count, **live token-layer parameters** (no more static badges), mint / allocate / burn / reserves tabs, burn requires confirmation |
+| Oversight | Banks | Registry + register bank, provisioning, permissions, suspend |
+| Oversight | Ledger & Transactions | Ledger monitor (channel height, blocks), 14-day volume chart, searchable/filterable transaction table, CSV export |
+| Supervision | AML Compliance | Alert queue, watchlist manager, KYC tier table (see `docs/AML-COMPLIANCE.md`) |
+| Supervision | Privacy & Cryptography | Live zk public params + wallet credential fingerprints + protocol explainers |
+| Administration | Staff & Access | CB staff RBAC management |
+
+### Bank staff console (`/b/00k`)
+
+- **Overview**: reserve KPI, AML watch KPI (flagged count), cash-in / cash-out
+  forms, transfer form.
+- **Customer accounts**: registry with live on-ledger balances (batched),
+  KYC tier, per-tx limit, status badges (flagged = payments blocked), freeze /
+  unfreeze, CSV export.
+- Customer passwords are set at onboarding; names are watchlist-screened.
+
+### Customer wallet (`/b/00k` as customer)
+
+Balance card, **Send** (with KYC-limit hints), **Receive** with a real account
+QR code, **Cash Out**, statement history with CSV export. Auto-refreshes every
+30 s.
+
+### Conventions
+
+- Topbar shows a live UTC clock, network status badge, and a dark-mode toggle.
+- All money renders via one formatter (Nepali-style grouping, 2 decimals).
+- Demo credentials are no longer displayed on the login screen — keep
+  §1's table with you during the demo.
+- Architecture/conventions: `docs/FRONTEND.md`.

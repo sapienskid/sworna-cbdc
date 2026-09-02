@@ -133,7 +133,8 @@ Phase 1          │   Phase 2-3         │   Phase 4               │   Phase
 ────────         │   ─────────         │   ─────────             │   ─────────
 Documentation    │   Working demo      │   Full banking system   │   Performance,
 & planning       │   (prototype)       │   + BFT consensus       │   security,
-(we are here)    │                     │   + compliance engine   │   and beyond
+[DONE]           │   [DONE — live]     │   + compliance engine   │   and beyond
+                 │   (we are here)     │                         │
 ```
 
 | Phase | Name | What happens | Who cares |

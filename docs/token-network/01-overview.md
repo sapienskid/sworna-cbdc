@@ -57,6 +57,8 @@ amounts or party names (verified in M2).
 | [05-engine-deep-dive](05-engine-deep-dive.md) | The Go engine (forked from token-sdk), its REST surface, how we own it |
 | [06-api-contracts](06-api-contracts.md) | FastAPI ↔ engine contracts |
 | [07-research-log](07-research-log.md) | Sources and lessons learned while building |
+| [08-provisioning](08-provisioning.md) | Token-CA provisioning, wallet pools, bank lifecycle |
+| [09-distributed-deployment](09-distributed-deployment.md) | N-host deployment, join bundles, DNS |
 
 ## Repo layout
 

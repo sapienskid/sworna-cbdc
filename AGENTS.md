@@ -8,12 +8,16 @@ runbook is [docs/SETUP.md](docs/SETUP.md); read it before doing anything.
 | Role | Command | Notes |
 |---|---|---|
 | Central bank | `./scripts/deploy-centralbank.sh --provision` | org1 network + channel + chaincode (approved, not committed) + engine + portal; exports join bundles |
-| Add a bank to the channel | `./scripts/onboard-bank.sh Bank{k}MSP <org-json>` | CB host; uses the bank's public org MSP JSON |
-| Commit chaincode | `./scripts/commit-chaincode.sh` | CB host, after all banks onboard |
-| Bank k | `./scripts/deploy-bank.sh 00k` | own CA + peer + chaincode + owner + portal; needs `SWORNA_CB_HOST` + `SWORNA_OWNER_<NAME>_HOST` |
-| Bank peer (low-level) | `BANK_CODE=00k ./scripts/bank-network.sh up\|identity\|join\|down` | identity exports `bank{k}-org.json`; join needs CB onboarding |
+| **Add a bank (one step)** | `./scripts/add-bank.sh 00k [<BANK-VM-IP>]` | **run on the CB host**; registers, provisions, syncs the repo, runs the bank identity, onboards to the channel, starts the bank's services and commits the chaincode. Idempotent. No IP = all-in-one on the CB VM |
+| Bank peer (low-level) | `BANK_CODE=00k ./scripts/bank-network.sh up\|identity\|join\|down` | building block used by add-bank.sh; identity exports `bank{k}-org.json`; join needs CB onboarding |
+| Commit chaincode only | `./scripts/commit-chaincode.sh` | CB host; normally already done by add-bank.sh |
 | Export bundles | `./scripts/export-join-bundles.sh` | CB host → `dist-bank-bundles/bank<CODE>.tar.gz` |
-| Teardown | `./network/network.sh down` | also `rm -rf token-services/{keys,data} backend/sworna.db dist-bank-bundles` for a full reset |
+| Teardown | `./network/network.sh down` | also `rm -rf token-services/{keys,data} backend/sworna.db dist-bank-bundles network/bank-hosts.env` for a full reset |
+
+Host IPs of onboarded banks live in `network/bank-hosts.env` (written by
+add-bank.sh); all deploy scripts source it as a fallback, so
+`SWORNA_OWNERS` / `SWORNA_OWNER_<NAME>_HOST` env vars are optional now —
+explicit env still wins.
 
 ## Rules
 

@@ -129,6 +129,31 @@ This provisions: orderer, CB peer, `settlement` channel, token CA, Issuer FSC, A
 
 ## 5. Onboarding Commercial Banks (Multi-Org Flow)
 
+### 5.0 Fast path — one command (recommended)
+
+From the **central-bank host**, after `deploy-centralbank.sh`:
+
+```bash
+./scripts/add-bank.sh 002 <BANK-VM-IP>     # remote bank, driven over SSH
+./scripts/add-bank.sh 002                  # or all-in-one: bank on the CB VM
+```
+
+That single idempotent command performs the entire §5 + §6 flow: registers the
+bank in the CB registry, provisions its token wallets, syncs the repo to the
+bank VM over SSH (`ssh-copy-id <user>@<ip>` first; `--user`/`--repo-dir` to
+customize), runs the bank's identity phase, pulls back its org JSON, admits
+the org to the channel (collecting co-signatures), joins the peer, starts the
+owner engine + banking backend (+ portal), commits the chaincode policy and
+verifies. Host IPs of all banks are recorded in `network/bank-hosts.env`, so
+no `SWORNA_OWNERS` / `SWORNA_OWNER_<NAME>_HOST` env vars are ever needed.
+Useful flags: `--name`, `--pool N`, `--user U`, `--no-sync`, `--skip-portal`,
+`--dry-run`.
+
+The manual steps below remain as the reference for what add-bank.sh automates
+(and for environments without SSH automation).
+
+### 5.1 Manual flow
+
 When adding a new bank org to a channel with existing members, Fabric requires **majority admin signatures** (`2-of-2`, `2-of-3`, etc.):
 
 1. **New Bank VM generates org identity:**

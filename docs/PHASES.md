@@ -26,7 +26,7 @@ This document is the master roadmap. Each phase has a goal, a task list, exit cr
 5. `docs/FULL-BANKING-SYSTEM.md` — complete banking-system subsystem map.
 6. `docs/API.md` — REST API catalog (as-designed).
 7. `docs/ADRs/0001–0009` — Architecture Decision Records.
-8. `docs/DEMO.md` and `docs/BENCHMARKS.md` — stubs to be completed in later phases.
+8. `docs/DEMO_AND_UI_GUIDE.md` (demo runbook) and `docs/BENCHMARKS.md` (stub, Phase 5).
 
 **Exit criteria:** every document reviewed and approved; every ADR records an accepted decision; all claims traceable to [REFERENCES.md](REFERENCES.md).
 
@@ -86,7 +86,7 @@ This document is the master roadmap. Each phase has a goal, a task list, exit cr
 | W2.4 | Wallet SPA (React) | Customer login; balance, send, receive, transaction history (served by FastAPI). |
 | W2.5 | Runtime onboarding verification | Create a bank → provision → bundle → bank identity → onboard (live) → join → commit; issue → transfers (intra + cross) → redeem through the APIs/portals. |
 | W2.6 | Tests | Happy-path e2e covering both REST layers (token engine + FastAPI). |
-| W2.7 | Documentation | ARCHITECTURE.md, API.md, PHASES.md, SETUP/DEPLOYMENT runbooks, ADRs 0001–0009. |
+| W2.7 | Documentation | ARCHITECTURE.md, API.md, PHASES.md, SETUP/DEPLOYMENT runbooks, ADRs 0001–0011. |
 | W2.8 | Distributed demo | CB host + one VM per bank; cross-host DNS via generated `extra_hosts` + `/etc/hosts`. |
 
 **Exit criteria (demo day):** a guided demo; admin console + wallet visible; docs complete.
@@ -211,7 +211,7 @@ Estimated team basis: **1 Senior Blockchain / Go Engineer + 1 Fullstack Python/R
 
 | Phase | Deliverables |
 |---|---|
-| 1 | README, PHASES, ARCHITECTURE, FULL-BANKING-SYSTEM, API, DEMO, BENCHMARKS, REFERENCES, ADRs 0001–0009 |
+| 1 | README, PHASES, ARCHITECTURE, FULL-BANKING-SYSTEM, API, DEMO_AND_UI_GUIDE, BENCHMARKS, REFERENCES, ADRs 0001–0011 |
 | 2 | Running token-sdk sample; pinned-version setup; verified ZK/REST/explorer |
 | 3 | Settlement network (CB + N self-provisioned banks) + SWR token layer + FastAPI backend + React wallet/admin console + tests + SETUP/DEMO runbooks |
 | 4 | Comprehensive system: SmartBFT, multi-channel, compliance engine, settlement, distributed lab deployment, monitoring, CI |

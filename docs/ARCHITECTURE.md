@@ -2,6 +2,13 @@
 
 This document describes the architectural design of the Sworna CBDC prototype. It reflects the decisions locked in the ADRs (see [docs/ADRs](ADRs/)) and the research in [REFERENCES.md](REFERENCES.md) (cited inline as `[R#]`).
 
+Deeper as-built documentation lives in the topic deep dives:
+[BLIND-SIGNATURES-AND-PRIVACY.md](BLIND-SIGNATURES-AND-PRIVACY.md) (the ZK/blind-signature layer),
+[AML-COMPLIANCE.md](AML-COMPLIANCE.md) (off-chain rule engine),
+[BACKEND-INTERNALS.md](BACKEND-INTERNALS.md) (FastAPI walk-through),
+[SECURITY-MODEL.md](SECURITY-MODEL.md) (trust + auth), and
+[FRONTEND.md](FRONTEND.md) (the React portals).
+
 ---
 
 ## 1. Design goals
@@ -60,7 +67,7 @@ This document describes the architectural design of the Sworna CBDC prototype. I
 
 - **FastAPI banking backend (Python)** — customer/bank/account registry, KYC flags, aggregation API, admin API, and the adapter that calls the token-sdk REST services [R13].
 - **React SPAs** — customer wallet; central-bank admin console; bank console.
-- **Blockchain explorer** — read-only view of the settlement ledger for demos and monitoring [R13].
+- **Custom ledger monitor** — the upstream blockchain explorer was dropped (ADR-0010); the CB portal embeds a read-only ledger monitor fed by the peer CLI (`GET /admin/ledger`).
 
 ## 5. Phase-1 topology
 

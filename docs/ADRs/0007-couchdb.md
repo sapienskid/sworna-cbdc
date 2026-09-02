@@ -1,6 +1,6 @@
 # ADR-0007: CouchDB as the peer state database
 
-**Status:** Accepted
+**Status:** Proposed — **not yet implemented** (as of Phase 3 the peers run LevelDB; `network/compose/docker/peercfg/core.yaml` sets `stateDatabase: goleveldb`)
 **Date:** 2026-08-18
 **Applies to:** all phases
 
