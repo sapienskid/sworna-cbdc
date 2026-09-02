@@ -76,11 +76,71 @@ export interface CirculationRow {
   total_minor: number;
   total: string;
   account_count: number;
+  wallet_errors: number;
 }
 
 export interface Overview {
   total_supply: string;
   circulation: CirculationRow[];
+  wallets_unreachable: number;
+}
+
+export interface AMLAlert {
+  id: number;
+  rule: string;
+  severity: "low" | "medium" | "high";
+  status: "open" | "reviewed" | "dismissed";
+  account_number: string;
+  bank_code: string;
+  counterparty: string;
+  txid: string;
+  amount: string;
+  details: string;
+  reviewed_by: string;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface AMLSummary {
+  open_alerts: number;
+  open_by_severity: Record<string, number>;
+  flagged_accounts: number;
+  watchlist_entries: number;
+  reportable_threshold: string;
+  kyc_tiers: Record<string, { label: string; per_tx_minor: number; daily_minor: number; daily_count: number }>;
+}
+
+export interface WatchlistEntry {
+  id: number;
+  list_type: "sanction" | "pep" | "internal";
+  value: string;
+  note: string;
+  active: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+export interface CryptoParams {
+  identifier: string;
+  curve_id: number;
+  idemix_curve_id: number;
+  quantity_precision: number;
+  max_token: number;
+  range_proof: { exponent: number | null; base: number };
+  issuers: number;
+  idemix_issuer_pk_fingerprint: string;
+  auditor: { msp_id: string; cert_fingerprint: string };
+  pedersen_generators_fingerprint: string;
+  params_file: string;
+  params_valid: boolean;
+}
+
+export interface WalletCryptoInfo {
+  account_number: string;
+  full_name: string;
+  wallet: string;
+  key_type: string;
+  credential_fingerprint: string | null;
 }
 
 export interface ProvisionResult {
@@ -134,7 +194,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const resp = await fetch(BASE + path, { ...options, headers });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    const message = typeof data.detail === "string" ? data.detail : JSON.stringify(data);
+    let message: string;
+    if (typeof data.detail === "string") message = data.detail;
+    else if (data.detail != null) message = JSON.stringify(data.detail);
+    else message = `Request failed (${resp.status})`;
     if (resp.status === 401) setToken(null);
     throw new ApiError(resp.status, message);
   }
@@ -150,6 +213,15 @@ export const api = {
   me: () => request<LoginResponse>("/auth/me"),
 
   banks: () => request<Bank[]>("/banks"),
+  createBank: (body: {
+    code: string;
+    name: string;
+    msp_id: string;
+    owner_node: string;
+    portal_url?: string;
+    staff_username?: string;
+    pool_size: number;
+  }) => request<Bank>("/banks", { method: "POST", body: JSON.stringify(body) }),
   provision: (code: string) =>
     request<ProvisionResult>(`/admin/banks/${code}/provision`, { method: "POST" }),
   setBankStatus: (code: string, status: Bank["status"]) =>
@@ -202,4 +274,28 @@ export const api = {
   overview: () => request<Overview>("/admin/overview"),
   transactions: () => request<TxLog[]>("/admin/transactions"),
   ledger: () => request<LedgerStatus>("/admin/ledger"),
+
+  accountBalances: () =>
+    request<{ account_number: string; balance: string }[]>("/accounts/balances"),
+
+  amlSummary: () => request<AMLSummary>("/admin/aml/summary"),
+  amlAlerts: (params: { status?: string; severity?: string; bank_code?: string } = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v) as [string, string][],
+    ).toString();
+    return request<AMLAlert[]>(`/admin/aml/alerts${qs ? `?${qs}` : ""}`);
+  },
+  reviewAlert: (id: number, status: AMLAlert["status"], note = "") =>
+    request<AMLAlert>(`/admin/aml/alerts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, note }),
+    }),
+  watchlist: () => request<WatchlistEntry[]>("/admin/aml/watchlist"),
+  addWatchlistEntry: (body: { list_type: WatchlistEntry["list_type"]; value: string; note: string }) =>
+    request<WatchlistEntry>("/admin/aml/watchlist", { method: "POST", body: JSON.stringify(body) }),
+  deactivateWatchlistEntry: (id: number) =>
+    request<void>(`/admin/aml/watchlist/${id}`, { method: "DELETE" }),
+
+  cryptoParams: () => request<CryptoParams>("/admin/crypto/params"),
+  cryptoWallets: () => request<WalletCryptoInfo[]>("/admin/crypto/wallets"),
 };
