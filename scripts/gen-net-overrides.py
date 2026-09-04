@@ -23,27 +23,18 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else ""
 def detect_cb_ip() -> str:
     """Best-effort IP of this host that other VMs can reach.
 
-    Set SWORNA_CB_HOST explicitly (e.g. the Tailscale IP) when the default
-    route interface is not the one the banks use.
+    Set SWORNA_CB_HOST explicitly (e.g. the Tailscale IP or LAN IP) when running across
+    multiple VMs. Defaults to 127.0.0.1 for single-host/local deployments.
     """
-    ip = os.environ.get("SWORNA_CB_HOST")
-    if ip:
-        return ip
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.255.255.255", 1))  # no packets sent; picks the route src
-        return s.getsockname()[0]
-    except OSError:
-        try:
-            return socket.gethostbyname(socket.gethostname())
-        except OSError:
-            return "127.0.0.1"
+    return os.environ.get("SWORNA_CB_HOST", "127.0.0.1")
 
-owners = [o for o in os.environ.get("SWORNA_OWNERS", "").split() if o]
+owners = [o for o in os.environ.get("SWORNA_OWNERS", "owner1 owner2 owner3 owner4 owner5").split() if o]
+if not owners:
+    owners = ["owner1", "owner2", "owner3", "owner4", "owner5"]
 
 
-def owner_host(node: str) -> str:
-    return os.environ.get(f"SWORNA_OWNER_{node.upper()}_HOST", "")
+def owner_host(node: str, fallback: str = "127.0.0.1") -> str:
+    return os.environ.get(f"SWORNA_OWNER_{node.upper()}_HOST") or fallback
 
 
 def req(var: str) -> str:
@@ -65,15 +56,13 @@ def render(services: dict) -> str:
 
 
 if MODE == "cb":
+    cb_ip = detect_cb_ip()
     hosts = []
     for o in owners:
-        ip = owner_host(o)
-        if ip:
-            hosts.append(f"{o}.sworna.example.com:{ip}")
-            # Map owner1 -> bank1, owner2 -> bank2
-            k = o.removeprefix("owner")
-            hosts.append(f"peer0.bank{k}.sworna.example.com:{ip}")
-    cb_ip = detect_cb_ip()
+        ip = owner_host(o, fallback=cb_ip)
+        hosts.append(f"{o}.sworna.example.com:{ip}")
+        k = o.removeprefix("owner")
+        hosts.append(f"peer0.bank{k}.sworna.example.com:{ip}")
     hosts.extend([
         f"orderer.sworna.example.com:{cb_ip}",
         f"peer0.centralbank.sworna.example.com:{cb_ip}",
@@ -82,7 +71,7 @@ if MODE == "cb":
     ])
     body = render({"auditor": hosts, "issuer": hosts})
 else:
-    cb = req("SWORNA_CB_HOST")
+    cb = os.environ.get("SWORNA_CB_HOST") or detect_cb_ip()
     hosts = [
         f"orderer.sworna.example.com:{cb}",
         f"peer0.centralbank.sworna.example.com:{cb}",
@@ -91,11 +80,10 @@ else:
         f"issuer.sworna.example.com:{cb}",
     ]
     for o in owners:
-        ip = owner_host(o)
-        if ip:
-            hosts.append(f"{o}.sworna.example.com:{ip}")
-            k = o.removeprefix("owner")
-            hosts.append(f"peer0.bank{k}.sworna.example.com:{ip}")
+        ip = owner_host(o, fallback=cb)
+        hosts.append(f"{o}.sworna.example.com:{ip}")
+        k = o.removeprefix("owner")
+        hosts.append(f"peer0.bank{k}.sworna.example.com:{ip}")
     body = render({"owner": hosts})
 
 if OUT:

@@ -73,24 +73,35 @@ echo "==> [4/5] Banking backend + CB portal"
 cd "$ROOT/backend"
 [ -d .venv ] || python3 -m venv .venv
 ./.venv/bin/pip install -q -r requirements.txt
-(setsid ./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/sworna-backend.log 2>&1 &)
+BACKEND_PORT="${SWORNA_BACKEND_PORT:-8000}"
+if ss -lnt 2>/dev/null | grep -q ":$BACKEND_PORT "; then
+  echo "   Port $BACKEND_PORT is in use, using 8100"
+  BACKEND_PORT=8100
+fi
+PORTAL_PORT="${SWORNA_PORTAL_PORT:-5173}"
+if ss -lnt 2>/dev/null | grep -q ":$PORTAL_PORT "; then
+  echo "   Port $PORTAL_PORT is in use, using 5273"
+  PORTAL_PORT=5273
+fi
+
+(setsid ./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" > /tmp/sworna-backend.log 2>&1 &)
 
 cd "$ROOT/web"
 npm install --silent
-(setsid npm run dev > /tmp/sworna-web.log 2>&1 &)
+(setsid npm run dev -- --port "$PORTAL_PORT" > /tmp/sworna-web.log 2>&1 &)
 
 if [ "$PROVISION" = "1" ]; then
   echo "==> [5/5] Provisioning wallet pools for registered banks"
   for i in $(seq 1 60); do
-    if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then break; fi
+    if curl -sf "http://localhost:${BACKEND_PORT}/healthz" >/dev/null 2>&1; then break; fi
     sleep 2
   done
-  TOKEN=$(curl -sf -X POST http://localhost:8000/api/v1/auth/login \
+  TOKEN=$(curl -sf -X POST "http://localhost:${BACKEND_PORT}/api/v1/auth/login" \
     -H 'Content-Type: application/json' \
     -d '{"username":"cbadmin","password":"sworna-cb"}' | jq -r .token 2>/dev/null || true)
   codes=""
   if [ -n "$TOKEN" ]; then
-    codes=$(curl -sf http://localhost:8000/api/v1/banks -H "Authorization: Bearer $TOKEN" \
+    codes=$(curl -sf "http://localhost:${BACKEND_PORT}/api/v1/banks" -H "Authorization: Bearer $TOKEN" \
         | jq -r '.[].code' 2>/dev/null || true)
   fi
   if [ -z "$codes" ]; then

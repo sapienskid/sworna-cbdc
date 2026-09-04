@@ -31,14 +31,14 @@ CC_SEQUENCE="${CC_SEQUENCE:-1}"
 CCAAS_SERVER_PORT=9999
 
 BANK_CODE="${BANK_CODE:?BANK_CODE (e.g. 001) must be set}"
-ORDERER_ADDR="${SWORNA_ORDERER_ADDR:-orderer.sworna.example.com:7050}"
+ORDERER_ADDR="${SWORNA_ORDERER_ADDR:-${SWORNA_CB_HOST:-127.0.0.1}:7050}"
 k=$((10#$BANK_CODE))                     # 1-based bank index
 OWNER_NODE="owner${k}"
 BANK_ORG="bank${k}"
 BANK_MSP="Bank${k}MSP"
 BANK_PEER_PORT=$((9051 + 2000 * (k - 1)))
 BANK_CC_PORT=$((BANK_PEER_PORT + 1))
-BANK_CA_PORT=$((8054 + 1000 * (k - 1)))
+BANK_CA_PORT=${BANK_CA_PORT:-$((20054 + k))}
 BANK_CA_NAME="ca-bank${k}"
 BANK_CA_CONT="ca_bank${k}"
 BANK_CA_DATA="../organizations/fabric-ca/${BANK_ORG}"
@@ -74,7 +74,7 @@ bank_ca_up() {
          DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
   mkdir -p "$NETWORK/organizations/fabric-ca/${BANK_ORG}"
   log_info "starting ${BANK_ORG} CA container"
-  docker compose -f compose/compose-bank-peer.yaml up -d bank-ca
+  docker compose -p "bank${BANK_CODE}" -f compose/compose-bank-peer.yaml up -d bank-ca
 
   log_info "waiting for ${BANK_ORG} CA to accept connections"
   for i in $(seq 1 30); do
@@ -89,8 +89,21 @@ bank_peer_up() {
          BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
          SWORNA_CB_HOST="${SWORNA_CB_HOST:?SWORNA_CB_HOST (CB host IP) must be set}" \
          DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
+  COMPOSE_FILES="-f compose/compose-bank-peer.yaml"
+  if [[ "$SWORNA_CB_HOST" != "127.0.0.1" && "$SWORNA_CB_HOST" != "localhost" ]]; then
+    cat <<EOF > compose/compose-bank-peer.net.yaml
+services:
+  bank-peer:
+    extra_hosts:
+      - "orderer.sworna.example.com:${SWORNA_CB_HOST}"
+      - "peer0.centralbank.sworna.example.com:${SWORNA_CB_HOST}"
+EOF
+    COMPOSE_FILES="$COMPOSE_FILES -f compose/compose-bank-peer.net.yaml"
+  else
+    rm -f compose/compose-bank-peer.net.yaml
+  fi
   log_info "starting ${BANK_ORG} peer container"
-  docker compose -f compose/compose-bank-peer.yaml up -d bank-peer
+  docker compose -p "bank${BANK_CODE}" $COMPOSE_FILES up -d bank-peer
 
   log_info "waiting for the ${BANK_ORG} peer to accept connections"
   local ok=0
@@ -138,14 +151,11 @@ export_org_json() {
 identity() {
   bank_ca_up
   enroll_org
-  bank_peer_up
-  render_conf
   export_org_json
   echo
   echo "Bank ${BANK_CODE} (${BANK_MSP}) identity ready."
-  echo "  -> send $NETWORK/${BANK_ORG}-org.json to the CB host and run:"
-  echo "       ./scripts/onboard-bank.sh ${BANK_MSP} <path-to-org-json>"
-  echo "  -> then re-run:  ./scripts/bank-network.sh join   (or ./scripts/deploy-bank.sh ${BANK_CODE})"
+  echo "  -> Public org MSP JSON exported to $NETWORK/${BANK_ORG}-org.json"
+  echo "  -> Submit application to Central Bank via POST /api/v1/onboarding/apply"
 }
 
 fetch_and_join() {
@@ -187,10 +197,13 @@ install_ccaas() {
   fi
 
   log_info "approving the chaincode definition for ${BANK_MSP}"
+  committed_seq=$(peer lifecycle chaincode querycommitted --channelID "$CHANNEL" --name "$CC_NAME" \
+    --output json 2>/dev/null | jq -r '.sequence // .chaincode_definitions[0].sequence // empty' || true)
+  effective_seq="${committed_seq:-$CC_SEQUENCE}"
   peer lifecycle chaincode approveformyorg -o "$ORDERER_ADDR" \
     --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
-    --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
-    --package-id "$PACKAGE_ID" --init-required
+    --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$effective_seq" \
+    --package-id "$PACKAGE_ID" --init-required || true
 
   log_info "starting ${CCAAS_PEERNAME}_${CC_NAME}_ccaas chaincode container"
   docker rm -f "${CCAAS_PEERNAME}_${CC_NAME}_ccaas" >/dev/null 2>&1 || true
@@ -225,15 +238,16 @@ down() {
          BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
          SWORNA_CB_HOST="${SWORNA_CB_HOST:-127.0.0.1}" \
          DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
-  docker compose -f compose/compose-bank-peer.yaml down
+  docker compose -p "bank${BANK_CODE}" -f compose/compose-bank-peer.yaml down
 }
 
 case "$MODE" in
   up)        bank_up ;;
   identity)  identity ;;
+  conf)      render_conf ;;
   join)      join ;;
   down)      down ;;
-  *)         echo "usage: $0 up|identity|join|down" >&2; exit 1 ;;
+  *)         echo "usage: $0 up|identity|conf|join|down" >&2; exit 1 ;;
 esac
 
 log_info "done."

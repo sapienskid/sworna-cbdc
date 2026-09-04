@@ -63,9 +63,21 @@ else
     bank_code=$(printf "%03d" "$bank_num")
     owner_host_var="SWORNA_OWNER_OWNER${bank_num}_HOST"
     bank_host="${!owner_host_var:-}"
-    if [ -z "$bank_host" ]; then
-      warnln "  Skipping ${bank_msp}: ${owner_host_var} not set"
-      continue
+    bank_admin_msp="$NETWORK/organizations/peerOrganizations/bank${bank_num}.sworna.example.com/users/Admin@bank${bank_num}.sworna.example.com/msp"
+    if [ -z "$bank_host" ] || [ "$bank_host" = "127.0.0.1" ] || [ "$bank_host" = "localhost" ]; then
+      if [ -d "$bank_admin_msp" ]; then
+        infoln "  signing update_envelope.pb locally with ${bank_msp} admin"
+        CORE_PEER_TLS_ENABLED=true \
+        CORE_PEER_LOCALMSPID="${bank_msp}" \
+        CORE_PEER_MSPCONFIGPATH="$bank_admin_msp" \
+        CORE_PEER_ADDRESS="localhost:$((9051 + 2000 * (bank_num - 1)))" \
+        CORE_PEER_TLS_ROOTCERT_FILE="$NETWORK/organizations/peerOrganizations/bank${bank_num}.sworna.example.com/peers/peer0.bank${bank_num}.sworna.example.com/tls/ca.crt" \
+        peer channel signconfigtx -f "$ARTIFACTS/update_envelope.pb"
+        continue
+      else
+        warnln "  Skipping ${bank_msp}: local admin MSP not found"
+        continue
+      fi
     fi
     infoln "  sending update_envelope.pb to ${bank_msp} at ${bank_host} for co-signature"
     # Push the .pb file to bank VM
@@ -106,7 +118,17 @@ jq -r '.values.MSP.value.config.tls_root_certs[0] // empty' "$ORG_JSON" | base64
 
 # ---- make the new owner reachable from the CB engine (live refresh) --------
 cd "$ROOT/token-services"
-export SWORNA_OWNERS="${SWORNA_OWNERS:?SWORNA_OWNERS (all owner nodes) must be set}"
+bank_num=$(echo "$MSP" | grep -oP '\d+' || echo "1")
+new_owner="owner${bank_num}"
+if [ -z "${SWORNA_OWNERS:-}" ]; then
+  SWORNA_OWNERS="$new_owner"
+else
+  case " $SWORNA_OWNERS " in
+    *" $new_owner "*) ;;
+    *) SWORNA_OWNERS="$SWORNA_OWNERS $new_owner" ;;
+  esac
+fi
+export SWORNA_OWNERS
 
 infoln "regenerating cross-host DNS override"
 python3 "$ROOT/scripts/gen-net-overrides.py" cb docker-compose.net.yaml

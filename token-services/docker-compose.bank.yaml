@@ -24,6 +24,7 @@ networks:
 
 services:
   owner:
+    container_name: token-services-${OWNER_NODE}
     hostname: ${OWNER_HOSTNAME:?OWNER_HOSTNAME (e.g. owner1) must be set}.sworna.example.com
     network_mode: host
     restart: always

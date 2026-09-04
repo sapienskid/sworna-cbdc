@@ -159,3 +159,34 @@ class AMLAlert(Base):
         from .amounts import to_swr
 
         return to_swr(self.amount_minor)
+
+
+class OnboardingApplication(Base):
+    """Institutional Commercial Bank Onboarding Application."""
+
+    __tablename__ = "onboarding_applications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bank_code: Mapped[str] = mapped_column(String(3), unique=True, index=True)
+    legal_name: Mapped[str] = mapped_column(String(100), unique=True)
+    msp_id: Mapped[str] = mapped_column(String(50))
+    owner_node: Mapped[str] = mapped_column(String(50))
+    peer_endpoint: Mapped[str] = mapped_column(String(100))
+    ca_endpoint: Mapped[str] = mapped_column(String(100))
+    portal_url: Mapped[str] = mapped_column(String(200), default="")
+    public_msp_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    pool_size: Mapped[int] = mapped_column(Integer, default=10)
+    status: Mapped[str] = mapped_column(
+        String(30), default="submitted"
+    )  # submitted | verified_monetary | approved | rejected
+
+    # Four-Eyes Dual Approval tracking
+    monetary_officer: Mapped[str] = mapped_column(String(50), default="")
+    monetary_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    interbank_limit_minor: Mapped[int] = mapped_column(Integer, default=10_000_000)  # default 100,000 SWR
+
+    security_officer: Mapped[str] = mapped_column(String(50), default="")
+    security_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    rejection_reason: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

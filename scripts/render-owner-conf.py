@@ -70,13 +70,27 @@ if bank_code:
             "          - id: %s%s\n            path: /var/fsc/keys/%s/wallet/%s/msp\n            type: idemix" % (wid, is_default, owner_node, wid)
         )
 
+all_msps = [
+    "      - id: CentralBankMSP\n"
+    "        mspType: bccsp\n"
+    "        mspID: CentralBankMSP\n"
+    "        path: /var/fsc/fabric/organizations/peerOrganizations/centralbank.sworna.example.com/msp"
+]
+for node in owners:
+    m = re.fullmatch(r"owner(\d+)", node)
+    if m:
+        k = m.group(1)
+        all_msps.append(
+            "      - id: Bank%sMSP\n"
+            "        mspType: bccsp\n"
+            "        mspID: Bank%sMSP\n"
+            "        path: /var/fsc/fabric/organizations/peerOrganizations/bank%s.sworna.example.com/msp" % (k, k, k)
+        )
+
 with open(sys.argv[1]) as f:
     tpl = f.read()
 
-if "owner" in sys.argv[1]:
-    listen_ip = opt(f"SWORNA_OWNER_{owner_node.upper()}_HOST", "0.0.0.0")
-else:
-    listen_ip = opt("SWORNA_CB_HOST", "0.0.0.0")
+listen_ip = "0.0.0.0"
 
 out = tpl
 out = out.replace("@@LISTEN_IP@@", listen_ip)
@@ -88,5 +102,6 @@ out = out.replace("@@BANK_MSP@@", bank_msp)
 out = out.replace("@@PEER_PORT@@", peer_port)
 out = out.replace("@@OWNER_RESOLVERS@@", "\n".join(resolvers))
 out = out.replace("@@WALLETS@@", "\n".join(wallets))
+out = out.replace("@@ALL_MSPS@@", "\n".join(all_msps))
 
 sys.stdout.write(out)

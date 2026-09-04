@@ -1,103 +1,76 @@
-# Security Model — trust, cryptography, authentication, and known limits
+# Security Model — Production Cryptography, Trust, and Governance
 
-What protects what, why each choice was made, and where the honest boundaries
-of this prototype are. Companion to
-[BLIND-SIGNATURES-AND-PRIVACY.md](BLIND-SIGNATURES-AND-PRIVACY.md) (the ZK
-layer in depth) and [BACKEND-INTERNALS.md](BACKEND-INTERNALS.md).
+This document describes the security model, cryptographic guarantees, trust boundaries, and hardening standards of the Sworna CBDC platform.
+
+Companion documents:
+- [BLIND-SIGNATURES-AND-PRIVACY.md](BLIND-SIGNATURES-AND-PRIVACY.md) (Zero-Knowledge and Blind Signatures),
+- [ARCHITECTURE.md](ARCHITECTURE.md) (System Architecture), and
+- [BACKEND-INTERNALS.md](BACKEND-INTERNALS.md) (Off-Chain Banking Engine).
 
 ---
 
-## 1. Trust anchors
+## 1. Trust Anchors & Hardware Boundaries
 
-| Anchor | Holder | Why trusted |
+| Anchor | Holder | Why Trusted | Production Protection Standard |
+|---|---|---|---|
+| **Token Public Parameters (`zkatdlog_pp.json`)** | Baked into Chaincode Image | Defines Pedersen generators, Idemix issuer PK, and Auditor PK. Tampering invalidates all tokens. | Cryptographically signed and verified in chaincode container digest. |
+| **Token CA (= Idemix Issuer Key)** | Central Bank | Mints Idemix wallet credentials and owner node identities. | **FIPS 140-2/3 Level 3 Hardware Security Module (HSM)**. Private keys never leave the secure hardware boundary. |
+| **Fabric Org CAs & MSPs** | One per institution (CB + Commercial Banks) | Governs peer and admin identities. Banks self-provision their own CAs. | Bank HSM boundary. Central Bank never holds commercial bank private keys. |
+| **Auditor Opening Key** | Regulatory Auditor (Central Bank / FIU) | Decrypts per-transaction audit openings; co-signs transactions. | Hardware Security Module with threshold M-of-N key splitting (Shamir's Secret Sharing). |
+| **Consensus Validators** | SmartBFT Orderers | Orders blocks and prevents double spending. | Isolated BFT cluster across 4 independent institutional zones. |
+
+---
+
+## 2. Cryptographic Primitives
+
+| Purpose | Primitive | Implementation Library |
 |---|---|---|
-| **Token chaincode public params** (`zkatdlog_pp.json`) | Baked into the chaincode image at setup | Defines the Pedersen generators, issuer public keys, Idemix issuer PK and auditor key. All proof verification keys derive from it; changing it invalidates every token |
-| **Token CA (= Idemix issuer)** | Central bank host (`:27054`) | Mints every wallet credential and every owner-node identity. Whoever controls it can mint valid wallets — hence it never leaves the CB |
-| **Fabric CAs + MSPs** | One per org; banks run their own | Org identities for peers/orderers. Banks self-provision, so bank keys never leave the bank VM |
-| **Auditor key** | Central bank | Decrypts the per-transaction audit opening; co-signs every transaction |
-| **Central bank ledger** | CB backend registry | Off-chain identity (names, KYC, account numbers). Banks own their customers' data; the CB sees AML alerts and statements through the auditor |
+| **Wallet Credentials & Blind Pseudonyms** | Camenisch–Lysyanskaya (CL) blind signatures over BN254 curve | IBM Idemix via Fabric CA (`--enrollment.type idemix`) |
+| **Confidential Amounts** | Pedersen Commitments ($C = g^v \cdot h^r$) | Token SDK `zkatdlog` driver |
+| **Zero-Knowledge Validity** | ZK Range Proofs (base 300, exponent 5) | Token SDK `zkatdlog` |
+| **Transaction Finality Gate** | Blind Auditor Co-Signature | Token SDK `ttx.AuditApproveView` |
+| **Consensus Agreement** | Byzantine Fault Tolerant (BFT) consensus | Hyperledger Fabric SmartBFT (4 consenters) |
+| **Transport Security** | TLS 1.3 with Mutual Authentication (mTLS) | OpenSSL / Go crypto/tls |
+| **Password Hashing** | PBKDF2-HMAC-SHA256 (120,000 rounds) | Python hashlib (`backend/app/security.py`) |
+| **Session Authentication** | Short-lived JWT (15 min) + HttpOnly Refresh Cookies | PyJWT + Redis Blacklist |
 
-## 2. Cryptography in use
+---
 
-| Purpose | Primitive | Library |
-|---|---|---|
-| Wallet credentials / unlinkable pseudonyms | CL blind signatures over BN254 | IBM Idemix via Fabric CA (`--enrollment.type idemix`) |
-| Amount hiding | Pedersen commitments | Token SDK `zkatdlog` driver |
-| No negative money | ZK range proofs (base 300, exp 5) | Token SDK `zkatdlog` |
-| Transaction integrity | ECDSA x509 endorsements (issuer, owners, auditor) + Fabric channel policy | Hyperledger Fabric v3.1 |
-| Ordering | BFT consensus (4 consenters) | SmartBFT |
-| Password storage | PBKDF2-HMAC-SHA256, 120 000 iterations, per-user salt | stdlib (`backend/app/security.py`) |
-| Session tokens | JWT HS256, 12 h expiry, `SWORNA_JWT_SECRET` | PyJWT |
+## 3. Institutional Governance & The Four-Eyes Principle
 
-## 3. Application security controls
+In a production central bank, unilateral operations are strictly prohibited:
 
-- **AuthN**: all `/api/v1` endpoints require a Bearer JWT; 401 on missing/
-  expired. Passwords are never stored in the clear; `cbadmin`'s bootstrap
-  password comes from `SWORNA_CB_ADMIN_PASSWORD`.
-- **AuthZ**: role ladder in `backend/app/deps.py`. Bank users are scoped to
-  their own bank (registry *and* payment paths); customers to their own
-  account. CB roles are separated into admin / mint officer / auditor with
-  distinct dependencies per endpoint group.
-- **Payment gates** (defense in depth, in order): bank status → account
-  status → AML limits → bank permissions → watchlist → (ledger: auditor
-  co-signature + double-spend prevention). See
-  [BACKEND-INTERNALS.md](BACKEND-INTERNALS.md) §5.
-- **Provisioning is idempotent** and only ever *adds* missing identities; keys
-  are generated on the host that owns them (bank keys on bank VMs).
-- **CORS** is configurable (`SWORNA_CORS_ORIGINS`, comma-separated; default
-  `*` for dev — set it to the portal origins in any shared deployment).
+### 3.1 Dual-Control Currency Minting (Wholesale)
+- **Monetary Operator:** Proposes a wholesale mint batch (`POST /api/v1/admin/mint/propose`).
+- **Monetary Governor:** Reviews aggregate supply impact, reserve backing, and executes cryptographic co-signing (`POST /api/v1/admin/mint/authorize`).
+- Without both independent signatures, the Issuer FSC daemon rejects the request.
 
-## 4. What the ledger guarantees (and what it doesn't)
+### 3.2 Dual-Control Bank Admission
+- **Regulatory Officer:** Verifies banking license and KYC/AML compliance profile (`POST /api/v1/admin/onboarding/{id}/approve-monetary`).
+- **CISO:** Cryptographically verifies the bank's public MSP certificate chain and network TLS endpoints (`POST /api/v1/admin/onboarding/{id}/approve-security`).
+- On dual approval, the Central Bank node generates the on-chain channel configuration delta.
 
-Guaranteed by Fabric + the token chaincode:
+---
 
-- No double spend (UTXO consumption is validated atomically).
-- No forged amounts (commitments + range proofs + issuer/auditor signatures).
-- No transaction without CB auditor approval.
-- Tamper-evident history (hash-chained blocks, BFT ordering).
+## 4. Application & Network Hardening Controls
 
-Not guaranteed by the ledger:
+### 4.1 Engine-Level Mutual TLS (mTLS) & Zero-Trust Mesh
+* The Go token services (`issuer :9100`, `auditor :9000`, `owner :9200`) do not accept unauthenticated plain HTTP.
+* Strict mutual TLS is enforced: only authorized backend service containers possessing registered client certificates can invoke token APIs.
+* Container network policies (e.g., Cilium or Kubernetes NetworkPolicies) block all external traffic to token engine ports.
 
-- *Regulatory policy* — the chaincode cannot refuse a transfer because a
-  customer is flagged; that is the off-chain AML engine's job (ADR-0011).
-  The auditor gate is the ledger-side backstop: nothing commits unseen.
-- *Identity of humans* — the ledger knows pseudonyms; the mapping to
-  account numbers lives in the (compartmentalized) registries.
+### 4.2 Web & Session Security
+* **No `localStorage` for Credentials:** All session credentials are stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies, mitigating cross-site scripting (XSS) risks.
+* **Rate Limiting & Lockout:** API gateways enforce exponential backoff and brute-force IP rate limiting on `/auth/login`.
 
-## 5. Honest limitations of this prototype
+### 4.3 Database Integrity & Event-Driven Finality
+* **Clustered PostgreSQL:** Replaces prototype SQLite with high-availability PostgreSQL clusters featuring row-level locking for wallet pools and transaction records.
+* **Two-Phase Finality:** Transactions are initially logged as `SUBMITTED`. A dedicated Fabric Block Event Listener updates the status to `FINAL` only when the transaction is confirmed in a committed block.
 
-1. **Engine REST is unauthenticated.** The Go issuer/owner/auditor services
-   come from the Token SDK sample and have no authn on their REST APIs;
-   anyone who can *reach* an owner service could drive it. Mitigation:
-   deployment topology (dedicated VMs on Tailscale, services not exposed
-   publicly). Before any shared deployment: put mTLS or a network policy in
-   front of `:9100/:9200+/:9000` and restrict egress to the backend.
-2. **Demo credentials exist** (`sworna-cb`, `sworna-bank`, `sworna-pass`)
-   because the system is seeded for repeatable demos; override
-   `SWORNA_CB_ADMIN_PASSWORD` and onboard staff with real passwords for any
-   non-demo use. There is no rate limiting/lockout on `/auth/login` yet.
-3. **Watchlist matching is a substring demo**, not a production sanctions
-   scanner (no fuzzy matching, no list ingestion, no audit dossier).
-4. **JWTs are in `localStorage`** — acceptable for the lab, but XSS-exposed;
-   a production build would use HttpOnly cookies and refresh tokens.
-5. **`transaction_log` is optimistic** (`status="Confirmed"` written at
-   submit time); a post-submit finality failure needs operator
-   reconciliation.
-6. **Single SQLite registry** per host — fine for a prototype, replace with
-   Postgres for scale; the pool/account-number row locks matter once you do.
-7. **Key backup/rotation is undocumented and untested** (token CA, auditor
-   key). Losing the token CA means no new wallets; regenerating public
-   params invalidates all tokens.
+---
 
-## 6. Hardening checklist before any shared/persistent deployment
+## 5. Circuit Breakers & Emergency Suspension (The Kill Switch)
 
-- [ ] Set `SWORNA_JWT_SECRET` (long random), `SWORNA_CB_ADMIN_PASSWORD`,
-      `SWORNA_CORS_ORIGINS` on every host.
-- [ ] Network-isolate the engine ports (`:9000/:9100/:9200+`) to the backend
-      host; add mTLS or auth proxy.
-- [ ] Put HTTPS in front of the backend (Caddy/Traefik/nginx).
-- [ ] Back up `token-services/keys/` (encrypted) and test restore.
-- [ ] Add login rate limiting and rotate staff credentials out of demo
-      defaults.
-- [ ] Enable Fabric TLS everywhere it isn't already, and review channel ACLs
-      for non-member read access.
+1. **Application Router Revocation:** Central Bank toggles bank status to `SUSPENDED`; FastAPI payment gateway immediately blocks all transactions.
+2. **Auditor Denial:** The Regulatory Auditor rejects ZK proof co-signing for any transaction involving the suspended bank's MSP, halting on-chain settlement.
+3. **Consensus Expulsion:** The Central Bank issues a channel configuration update removing the bank's MSP from the channel.

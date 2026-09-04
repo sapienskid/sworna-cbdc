@@ -26,10 +26,18 @@ setGlobals 1
 if [ "$#" -gt 0 ]; then
   BANK_MSP_LIST="$*"
 else
-  TOKEN=$(curl -sf -X POST http://localhost:8000/api/v1/auth/login \
+  BACKEND="${SWORNA_BACKEND:-}"
+  if [ -z "$BACKEND" ]; then
+    if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then
+      BACKEND="http://localhost:8000/api/v1"
+    else
+      BACKEND="http://localhost:8100/api/v1"
+    fi
+  fi
+  TOKEN=$(curl -sf -X POST "$BACKEND/auth/login" \
     -H 'Content-Type: application/json' \
     -d '{"username":"cbadmin","password":"sworna-cb"}' | jq -r .token)
-  BANK_MSP_LIST=$(curl -sf http://localhost:8000/api/v1/banks \
+  BANK_MSP_LIST=$(curl -sf "$BACKEND/banks" \
     -H "Authorization: Bearer $TOKEN" | jq -r '.[].msp_id' | sort)
 fi
 
@@ -45,11 +53,11 @@ committed_seq=$(peer lifecycle chaincode querycommitted --channelID "$CHANNEL" -
   --output json 2>/dev/null | jq -r '.sequence // .chaincode_definitions[0].sequence // empty' || true)
 if [ -n "$committed_seq" ]; then
   CC_SEQUENCE=$((committed_seq + 1))
-  CC_VERSION=1
+  CC_VERSION="1.0"
   echo "chaincode is committed at sequence ${committed_seq}; upgrading to ${CC_SEQUENCE}"
 else
   CC_SEQUENCE=1
-  CC_VERSION=1
+  CC_VERSION="1.0"
   echo "chaincode not committed yet; committing at sequence 1"
 fi
 
@@ -63,13 +71,42 @@ peer lifecycle chaincode approveformyorg -o localhost:7050 \
   --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
   --package-id "$PACKAGE_ID" --signature-policy "$policy" --init-required
 
+# Approve on behalf of each onboarded bank peer
+for msp in $BANK_MSP_LIST; do
+  bank_org="$(echo "$msp" | sed 's/Bank/bank/;s/MSP//')"
+  k=$(echo "$bank_org" | sed 's/bank//')
+  bank_peer_port=$((9051 + 2000 * (k - 1)))
+  org_dir="$NETWORK/organizations/peerOrganizations/${bank_org}.sworna.example.com"
+  if [ -d "$org_dir" ]; then
+    bank_pkg_id=$(CORE_PEER_LOCALMSPID="$msp" \
+      CORE_PEER_ADDRESS="localhost:${bank_peer_port}" \
+      CORE_PEER_MSPCONFIGPATH="$org_dir/users/Admin@${bank_org}.sworna.example.com/msp" \
+      CORE_PEER_TLS_ROOTCERT_FILE="$org_dir/tlsca/tlsca.${bank_org}.sworna.example.com-cert.pem" \
+      peer lifecycle chaincode queryinstalled --output json 2>/dev/null \
+      | jq -r '.installed_chaincodes[] | select(.label | startswith("tokenchaincode_")) | .package_id' | head -1)
+    [ -n "$bank_pkg_id" ] || bank_pkg_id="$PACKAGE_ID"
+
+    infoln "approving definition for ${msp} (v${CC_VERSION} seq ${CC_SEQUENCE}) with package ${bank_pkg_id}"
+    CORE_PEER_LOCALMSPID="$msp" \
+    CORE_PEER_ADDRESS="localhost:${bank_peer_port}" \
+    CORE_PEER_MSPCONFIGPATH="$org_dir/users/Admin@${bank_org}.sworna.example.com/msp" \
+    CORE_PEER_TLS_ROOTCERT_FILE="$org_dir/tlsca/tlsca.${bank_org}.sworna.example.com-cert.pem" \
+    peer lifecycle chaincode approveformyorg -o localhost:7050 \
+      --ordererTLSHostnameOverride orderer.sworna.example.com --tls --cafile "$ORDERER_CA" \
+      --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" --sequence "$CC_SEQUENCE" \
+      --package-id "$bank_pkg_id" --signature-policy "$policy" --init-required || true
+  fi
+done
+
 # Build peerAddresses and tlsRootCertFiles list for all onboarded peers
 PEER_FLAGS=(--peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA")
 for msp in $BANK_MSP_LIST; do
   bank_org="$(echo "$msp" | sed 's/Bank/bank/;s/MSP//')"
+  k=$(echo "$bank_org" | sed 's/bank//')
+  bank_peer_port=$((9051 + 2000 * (k - 1)))
   tls_cert="$NETWORK/organizations/peerOrganizations/${bank_org}.sworna.example.com/tlsca/tlsca.${bank_org}.sworna.example.com-cert.pem"
   if [ -f "$tls_cert" ]; then
-    PEER_FLAGS+=(--peerAddresses "peer0.${bank_org}.sworna.example.com:9051" --tlsRootCertFiles "$tls_cert")
+    PEER_FLAGS+=(--peerAddresses "localhost:${bank_peer_port}" --tlsRootCertFiles "$tls_cert")
   fi
 done
 

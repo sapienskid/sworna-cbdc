@@ -116,41 +116,67 @@ cd sworna-cbdc
 
 ## 4. Central Bank Deployment
 
-Run **once** on the CB VM:
-
+### Recommended: Unified CLI
+Run on the Central Bank VM:
 ```bash
-cd ~/sworna-cbdc
+./bin/sworna cb init --provision
+```
+
+### Script Fallback:
+```bash
 ./scripts/deploy-centralbank.sh --provision
 ```
 
-This provisions: orderer, CB peer, `settlement` channel, token CA, Issuer FSC, Auditor FSC, backend API, and CB portal.
+This provisions entirely within Docker:
+- Fabric Orderer (`orderer.sworna.example.com:7050`)
+- Central Bank Peer (`peer0.centralbank.sworna.example.com:7051`)
+- Settlement Channel (`settlement`) with Token Chaincode sequence committed
+- Token CA (Idemix Issuer CA on `:27054`)
+- Issuer FSC Engine (`:9100` REST, `:9101` P2P)
+- Auditor FSC Engine (`:9000` REST, `:9001` P2P)
+- Central Bank Banking Backend (`sworna-cb-backend` container on `:8100`)
+- Central Bank Web Portal (`sworna-cb-web` container on `:5273`)
 
 ---
 
 ## 5. Onboarding Commercial Banks (Multi-Org Flow)
 
-### 5.0 Fast path — one command (recommended)
+### 5.0 Fast path via CLI (Multi-VM Distributed Model)
 
-From the **central-bank host**, after `deploy-centralbank.sh`:
+Each commercial bank runs on its own VM, generating and retaining its own private signing and TLS keys.
+
+**Step 1: On the Commercial Bank VM (e.g. Bank 001 on `10.0.0.21`):**
+```bash
+./bin/sworna bank init --code 001 --cb-host <CB_IP>
+```
+This generates the bank's local MSP, TLS credentials, and exports the public definition `network/bank1-org.json`.
+
+**Step 2: On the Central Bank VM (e.g. `10.0.0.10`):**
+- Review the bank's onboarding submission via the Central Bank Web Portal (`http://<CB_IP>:5273/onboarding`).
+- Approve the bank (4-Eyes dual control) to commit the channel configuration delta admitting `Bank1MSP`.
+
+**Step 3: On the Commercial Bank VM:**
+```bash
+./bin/sworna bank start --code 001 --cb-host <CB_IP>
+```
+The bank peer joins `settlement`, approves chaincode, and starts the containerized FSC Owner Engine (`token-services-owner1` on `:9200`).
+
+### 5.1 Fast path via SSH Script (Automated from CB host)
+
+From the **central-bank host**, after `sworna cb init`:
 
 ```bash
 ./scripts/add-bank.sh 002 <BANK-VM-IP>     # remote bank, driven over SSH
 ./scripts/add-bank.sh 002                  # or all-in-one: bank on the CB VM
 ```
 
-That single idempotent command performs the entire §5 + §6 flow: registers the
+That single idempotent command performs the entire flow: registers the
 bank in the CB registry, provisions its token wallets, syncs the repo to the
-bank VM over SSH (`ssh-copy-id <user>@<ip>` first; `--user`/`--repo-dir` to
-customize), runs the bank's identity phase, pulls back its org JSON, admits
+bank VM over SSH (`ssh-copy-id <user>@<ip>` first), runs the bank's identity phase, pulls back its org JSON, admits
 the org to the channel (collecting co-signatures), joins the peer, starts the
-owner engine + banking backend (+ portal), commits the chaincode policy and
-verifies. Host IPs of all banks are recorded in `network/bank-hosts.env`, so
-no `SWORNA_OWNERS` / `SWORNA_OWNER_<NAME>_HOST` env vars are ever needed.
-Useful flags: `--name`, `--pool N`, `--user U`, `--no-sync`, `--skip-portal`,
-`--dry-run`.
+owner engine, and commits the chaincode policy. Host IPs of all banks are recorded in `network/bank-hosts.env`.
 
-The manual steps below remain as the reference for what add-bank.sh automates
-(and for environments without SSH automation).
+The manual steps below remain as the reference for what the tooling automates.
 
 ### 5.1 Manual flow
 
@@ -211,23 +237,26 @@ WantedBy=multi-user.target
 
 ---
 
+---
+
 ## 7. Verification Checklist & Live Test Results
 
-### Live Verified Results (Session Log)
+### Automated Verification via Unified CLI
+```bash
+./bin/sworna test e2e
+```
+
+### Live Verified Results (5-Bank Network Session Log)
 
 | Step | Operation | Result | Details |
 |------|-----------|--------|---------|
-| 1 | **CB Wholesale Mint** | **CONFIRMED** | Minted 25,000 SWR to Bank B Reserve (`txid: ae771171...`) |
-| 2 | **Bank B Deposit** | **CONFIRMED** | Deposited 5,000 SWR from Reserve to Charlie (`txid: 8fb3de43...`) |
-| 3 | **Alice → Charlie Transfer** | **CONFIRMED** | Alice (Bank A) sent 200 SWR to Charlie (Bank B) (`Block #43`, `txid: ea385293...`) |
-| 4 | **Alice → Charlie Transfer** | **CONFIRMED** | Alice sent 50 SWR to Charlie in 8s (`txid: 2ad6803d...`) |
-| 5 | **Charlie → Alice Return** | **CONFIRMED** | Charlie (Bank B) sent 100 SWR back to Alice (Bank A) in 8s (`txid: f9a11dd9...`) |
-
-### Final Verified Balances
-
-- **Alice (Bank A, `SWR-001-00000001`):** `1,100.00 SWR`
-- **Charlie (Bank B, `SWR-002-00000001`):** `5,150.00 SWR`
-- **Bank B Reserve Vault (`RESERVE-002`):** `20,000.00 SWR`
+| 1 | **CB Wholesale Mint** | **CONFIRMED** | Minted 10,000 SWR to Bank 001 (`txid: 8fea91f9...`) and 5,000 SWR in automated E2E (`txid: 3c43360a...`) |
+| 2 | **Customer Onboarding** | **CONFIRMED** | Onboarded Alice (`SWR-001-00000001`) and Bob (`SWR-002-00000001`) with Idemix wallet assignments |
+| 3 | **Interbank ZKP Settlement (B1 → B2)** | **CONFIRMED** | Bank 001 sent 2,500 SWR to Bank 002 (`txid: 00fc85bd...`) verified by Auditor node |
+| 4 | **Interbank ZKP Settlement (B2 → B5)** | **CONFIRMED** | Bank 002 sent 500 SWR to Bank 005 (`txid: 0f96759f...`) verified by Auditor node |
+| 5 | **Customer Retail Payment (Alice → Bob)** | **CONFIRMED** | Alice (Bank 001) paid Bob (Bank 002) 100 SWR (`txid: f5399348...`) |
+| 6 | **Customer Token Redemption (Bob)** | **CONFIRMED** | Bob redeemed 100 SWR (`txid: 3607ce2a...`) verified and burned by Auditor node |
+| 7 | **Automated E2E Transfer (B1 → B3)** | **CONFIRMED** | Bank 001 sent 1,500 SWR to Bank 003 (`txid: 1c4726d1...`) via `./bin/sworna test e2e` |
 
 ---
 
@@ -244,6 +273,7 @@ WantedBy=multi-user.target
 | `/api/v1/accounts` | `POST` | `bank_admin` | Onboards customer, assigns wallet from pool |
 | `/api/v1/accounts/{acct}/balance` | `GET` | `customer` | Returns on-chain ZK token balance |
 | `/api/v1/payments/transfer` | `POST` | `customer` | Executes intra or inter-bank P2P transfer |
+| `/api/v1/payments/redeem` | `POST` | `bank_staff` | Burns tokens and redeems to fiat/cash |
 
 ---
 
@@ -251,25 +281,28 @@ WantedBy=multi-user.target
 
 | Issue | Cause | Fix Applied |
 |-------|-------|-------------|
-| Multi-org channel update rejection | Fabric requires majority signatures (`2-of-2`) | Added multi-org co-signing relay flow to `onboard-bank.sh` |
-| `reading from file /var/fsc/keys/owner1/fsc/.../cert.pem failed` | Sibling bank public cert missing on new bank node | Export join bundle with all sibling public certs |
-| `failed getting recipient identity from owner2: all dials failed` | FSC announced local container IP instead of Tailscale IP | Configured `fsc.p2p.listenAddress: /ip4/<TAILSCALE_IP>/tcp/<PORT>` |
-| `account not found` on interbank transfer | Local DB only stored local accounts | Added `InterbankAccount` virtual resolution in `payments.py` |
-| `sufficient but partially locked funds` | In-flight timeout held in-memory UTXO lock | Restarted owner container to release locks; increased timeout to 120s |
+| ZKP Public Parameters mismatch (`invalid proof`) | Re-generated Idemix CA produced fresh issuer key hash differing from checked-in `zkatdlog_pp.json` | Compiled native `tokengen` from Fabric Token-SDK v0.3.0, generated fresh public parameters, committed chaincode sequence on-chain |
+| Chaincode upgrade error: `already initialized but called as init` | Fabric v2/v3 rejects `--isInit` on already initialized chaincode definitions | Upgraded chaincode definition, then invoked regular `init` transaction without `--isInit` flag |
+| Multi-org channel update rejection | Fabric requires majority signatures (`2-of-2`, `3-of-4`) | Added multi-org co-signing relay flow to `onboard-bank.sh` |
+| `failed getting recipient identity: all dials failed` | FSC announced local loopback IP instead of routable container network | Configured container DNS overrides and bridge network routing in `scripts/gen-net-overrides.py` |
+| `sufficient but partially locked funds` | In-flight transaction temporarily locked UTXO inputs | Waited for ledger commit (~8-10s) for token collector to release change outputs; increased client timeout to 120s |
 
 ---
 
 ## 10. Port Reference
 
-| Service | Port | Protocol | VM |
-|---------|------|----------|----|
+| Service | Port | Protocol | Scope |
+|---------|------|----------|-------|
 | Fabric Orderer | 7050 | gRPC/TLS | Central Bank |
 | Fabric Peer CB | 7051 | gRPC/TLS | Central Bank |
-| Fabric Peer Bank A | 9051 | gRPC/TLS | Bank A |
-| Fabric Peer Bank B | 11051 | gRPC/TLS | Bank B |
+| Fabric Peers (Bank 1..5) | 9051, 11051, 13051, 15051, 17051 | gRPC/TLS | Commercial Banks 001–005 |
+| Token CA (Idemix Issuer) | 27054 | HTTP | Central Bank |
 | Issuer FSC HTTP / P2P | 9100 / 9101 | HTTP / libp2p | Central Bank |
 | Auditor FSC HTTP / P2P | 9000 / 9001 | HTTP / libp2p | Central Bank |
-| Owner1 FSC HTTP / P2P | 9200 / 9201 | HTTP / libp2p | Bank A |
-| Owner2 FSC HTTP / P2P | 9300 / 9301 | HTTP / libp2p | Bank B |
-| Backend API | 8000 | HTTP | All VMs |
-| Web Portal | 5173 | HTTP | All VMs |
+| Owner 1 FSC HTTP / P2P | 9200 / 9201 | HTTP / libp2p | Bank 001 |
+| Owner 2 FSC HTTP / P2P | 9300 / 9301 | HTTP / libp2p | Bank 002 |
+| Owner 3 FSC HTTP / P2P | 9400 / 9401 | HTTP / libp2p | Bank 003 |
+| Owner 4 FSC HTTP / P2P | 9500 / 9501 | HTTP / libp2p | Bank 004 |
+| Owner 5 FSC HTTP / P2P | 9600 / 9601 | HTTP / libp2p | Bank 005 |
+| Central Bank Backend API | 8100 | HTTP | Central Bank (`sworna-cb-backend`) |
+| Central Bank Web Portal | 5273 | HTTP | Central Bank (`sworna-cb-web`) |

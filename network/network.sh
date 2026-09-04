@@ -29,7 +29,9 @@ trap "popd > /dev/null" EXIT
 . scripts/utils.sh
 
 : ${CONTAINER_CLI:="docker"}
-if command -v ${CONTAINER_CLI}-compose > /dev/null 2>&1; then
+if ${CONTAINER_CLI} compose version > /dev/null 2>&1; then
+    : ${CONTAINER_CLI_COMPOSE:="${CONTAINER_CLI} compose"}
+elif command -v ${CONTAINER_CLI}-compose > /dev/null 2>&1; then
     : ${CONTAINER_CLI_COMPOSE:="${CONTAINER_CLI}-compose"}
 else
     : ${CONTAINER_CLI_COMPOSE:="${CONTAINER_CLI} compose"}
@@ -453,8 +455,7 @@ function networkDown() {
 
   # Don't remove the generated artifacts -- note, the ledgers are always removed
   if [ "$MODE" != "restart" ]; then
-    # Bring down the network, deleting the volumes
-    ${CONTAINER_CLI} volume rm docker_orderer.sworna.example.com docker_peer0.centralbank.sworna.example.com 2>/dev/null || true
+    ${CONTAINER_CLI} volume rm docker_orderer.sworna.example.com docker_peer0.centralbank.sworna.example.com compose_orderer.sworna.example.com compose_peer0.centralbank.sworna.example.com 2>/dev/null || true
     #Cleanup the chaincode containers
     clearContainers
     #Cleanup images

@@ -50,43 +50,45 @@ Host-level `/etc/hosts` (for host-run CLI + the backend):
 - **All hosts:** verify `localhost` resolves (a blank `/etc/hosts` breaks every
   Fabric CA call).
 
-## 4. Deployment sequence (the whole story)
+## 4. Deployment sequence with `sworna-cli`
 
-1. **CB VM:**
+All steps can be driven using `./bin/sworna` (or `pip install -e ./cli`).
+
+1. **CB VM (Central Bank Stack):**
    ```bash
-   ./scripts/deploy-centralbank.sh --provision
-   #   -> org1 network + channel `settlement` + chaincode installed/approved for the CB
-   #   -> token CA + issuer + auditor + backend + portal (registry starts EMPTY)
+   ./bin/sworna cb init --provision
+   #   -> Orderer + CB peer + settlement channel + CCaaS chaincode
+   #   -> Token CA + issuer (:9100) + auditor (:9000)
+   #   -> Backend (:8100) + Central Bank Web Portal (:5273)
    ```
-2. **CB VM — register a bank at runtime** (`POST /api/v1/banks` with `code`,
-   `name`, `msp_id=Bank{k}MSP`, `owner_node=owner{k}`, optional
-   `staff_username`), then provision it
-   (`POST /api/v1/admin/banks/<code>/provision` — mints the owner's FSC
-   identity + wallet pool) and export its bundle
-   (`./scripts/export-join-bundles.sh`).
-3. **Bank `k` VM:** install the Fabric tools, extract its bundle, run:
+2. **CB VM — Register Bank at runtime:**
+   - Either via the Portal (`http://<CB-IP>:5273/banks`), or via CLI.
+   - Central Bank mints the wallet pool and exports the join bundle.
+
+3. **Bank `k` VM — Generate Local MSP & Identity:**
    ```bash
-   export SWORNA_CB_HOST=<CB-IP>
-   export SWORNA_OWNERS="owner1 owner2 ..."          # ALL banks
-   export SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ...    # every bank VM IP
-   ./scripts/deploy-bank.sh 00k
-   #   -> starts its own CA + peer, enrolls its org, renders the owner conf,
-   #      exports network/bank{k}-org.json, prints "send this to the CB"
+   ./bin/sworna bank init --code 00k --cb-host <CB-IP>
+   #   -> Starts local Bank CA + peer
+   #   -> Enrolls bank identity, generates keys locally
+   #   -> Exports network/bank{k}-org.json
    ```
-4. **CB VM — live onboarding** (no downtime):
+
+4. **CB VM — Onboard Bank (Channel Update):**
+   - Submit `bank{k}-org.json` through the Central Bank Web Portal (`http://<CB-IP>:5273/onboarding`) or script.
+   - Central Bank executes 4-Eyes approval to commit the channel delta admitting `Bank{k}MSP`.
+
+5. **Bank `k` VM — Join Channel & Start Services:**
    ```bash
-   ./scripts/onboard-bank.sh Bank{k}MSP bank{k}-org.json
-   #   -> admits the org via a channel config update, refreshes the CB engine's
-   #      owner resolvers + DNS, rolling-recreates issuer/auditor (~10-20 s)
+   ./bin/sworna bank start --code 00k --cb-host <CB-IP>
+   #   -> Joins settlement channel, approves chaincode
+   #   -> Launches CCaaS container and FSC Owner engine (:9200+100*(k-1))
    ```
-5. **Bank `k` VM:** re-run `./scripts/deploy-bank.sh 00k` — it joins the
-   channel, installs + approves the chaincode, runs its CCAAS container, starts
-   the owner service and the portal.
-6. **CB VM:** update the endorsement policy to include every onboarded bank:
+
+6. **Automated Verification:**
    ```bash
-   ./scripts/commit-chaincode.sh        # upgrade-aware: bumps the sequence
+   ./bin/sworna test e2e
+   #   -> Verifies minting, interbank ZKP transfers, and ledger reconciliation
    ```
-   Re-run this step after each new bank is onboarded.
 
 ## 5. Join bundle (shrunk — no secrets leak)
 

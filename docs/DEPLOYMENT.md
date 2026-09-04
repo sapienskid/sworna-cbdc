@@ -1,115 +1,130 @@
-# DEPLOYMENT — how Sworna is deployed
+# DEPLOYMENT — Sworna CBDC Deployment Guide
 
-One repository; a machine's role is decided by **which script it runs** and
-**which keys it holds**. The deployment is **distributed**: the central bank and
-every commercial bank run on their own hosts, and any number of banks are
-supported.
+This document outlines the deployment topology, roles, and operational procedures for Sworna CBDC, covering both the **Single-Node 5-Bank Sandbox** (for rapid evaluation and testing) and the **Distributed Production Architecture** (for real-world institutional multi-cloud deployment).
+
+---
+
+## 1. Deployment Models
 
 ```
-Central-bank host   orderer · peer0.centralbank · ca_org1 · ca_orderer · token CA · issuer/auditor · backend · CB portal
-Bank k host         ca_bank{k} · peer0.bank{k} · chaincode · owner{k} · bank portal
-Customer machines   a browser only (the bank portal)
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│ MODEL A: SINGLE-NODE 5-BANK SANDBOX (Development, Lab & Rapid Evaluation)             │
+│ • Runs 1 Central Bank + 5 Commercial Banks on a single host or VM (16–32 GB RAM)      │
+│ • Container bridge networking with internal DNS resolution                            │
+│ • Zero SSH, zero Tailscale, zero /etc/hosts hacking                                   │
+│ • Portals exposed on http://localhost:8000 (CB) and :8001–:8005 (Banks 001–005)      │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│ MODEL B: DISTRIBUTED PRODUCTION ARCHITECTURE (Institutional Real-World)               │
+│ • Central Bank VPC: 4-Node SmartBFT Ordering Cluster, Token CA, Issuer, Auditor       │
+│ • Commercial Bank VPCs (Banks 001..N): Autonomous Peers, Local Fabric CAs, FSC Engines│
+│ • Interconnect: High-security IPsec VPN / dedicated financial extranet with mTLS      │
+│ • Zero SSH access between institutions; API-driven pull-based admission pipeline       │
+└───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-> **Operational runbook:** [SETUP.md](SETUP.md) is the step-by-step,
-> agent-runnable guide. Read it before running the scripts below.
+---
 
-## 1. Roles by script
+## 2. Institutional Roles & Separation
 
-| Script | Runs on | Starts |
-|---|---|---|
-| `scripts/deploy-centralbank.sh --provision` | CB host | org1 network + channel `settlement` + chaincode (approved, not committed) + identity enrollment + issuer/auditor + backend + portal + join bundles |
-| `scripts/onboard-bank.sh <MSP> <org-json>` | CB host | adds a bank's org to `settlement` (channel config update) |
-| `scripts/commit-chaincode.sh` | CB host | commits the chaincode with an OR endorsement policy over the CB + all banks |
-| `scripts/deploy-bank.sh <CODE>` | each bank host | the bank's own CA + peer + chaincode + owner + portal |
-| `scripts/bank-network.sh up\|identity\|join\|down` | each bank host | low-level bank peer bring-up, org enrollment, channel join |
-| `scripts/export-join-bundles.sh` | CB host | exports `dist-bank-bundles/bank<CODE>.tar.gz` (token wallets + orderer public certs) |
+| Organization | Nodes & Services | Network Exposure | Key Custody |
+|---|---|---|---|
+| **Consensus Validators** | 4-Node SmartBFT Ordering Cluster (`orderer1..4`) | Port 7050 (mTLS only to peers) | Central Bank & Consortium HSM |
+| **Central Bank** | CB Peer, Token CA, Issuer FSC, Auditor FSC, Admin Console | Ports 7051, 9000, 9100, 27054, 8000 | FIPS 140-2 Level 3 HSM |
+| **Commercial Bank `k`** | Bank Peer (`peer0.bank{k}`), Local CA, Owner FSC (`owner{k}`), Core Banking Adapter | Ports 9051+2000(k-1), 9200+100(k-1), 8000 | Bank Internal HSM (never leaves Bank) |
+| **Regulatory Auditor** | Auditor FSC (`:9000/:9001`) with selective de-anonymization | Port 9000 (REST), 9001 (P2P libp2p) | Regulatory Agency HSM |
 
-## 2. Trust model
+---
 
-- The **CB is the network founder**: it runs the orderer, creates `settlement`
-  with the central-bank org, and adds each bank's org via a channel config
-  update. It also runs the **token CA** (idemix issuer — all wallets come from
-  it), the **issuer** (mint/burn) and the **auditor** (approves + sees every
-  transaction).
-- Each **bank self-provisions its Fabric org** (peer + admin) against its **own
-  Fabric CA** on its own VM. Only its public CA cert is shared with the CB. The
-  CB never holds a bank's Fabric private keys, and a bank never holds another
-  org's keys.
-- **Why Join Bundles are required (`bank<CODE>.tar.gz`):**
-  The central bank controls the Token CA (the root idemix trust anchor trusted by the chaincode). Banks cannot mint their own token-spending keys. The CB exports a minimized bundle containing:
-  - `token-services/keys/<owner_node>` — the bank's FSC identity and Idemix customer wallet pool (`pool_001_w1..w10`).
-  - `orderer/tls/ca.crt` & `tlsca...pem` — public TLS root certs to communicate with the CB orderer.
-  - No bank Fabric private keys, no Bank CA keys, and no genesis blocks are in the bundle.
+## 3. Institutional Bank Admission Protocol (Production)
 
-## 3. Fresh-clone gotchas (now handled)
+In production, banks are not provisioned via central SSH. The onboarding follows an **asynchronous 4-stage admission flow**:
 
-- `token-services/keys/` and `network/organizations/` are gitignored — the CB
-  deploy enrolls identities automatically; banks self-provision their Fabric org.
-- Deploy scripts require **Docker Compose v2** (`docker compose`).
-- Backend paths derive from the repo location (`backend/app/paths.py`); owner
-  REST URLs derive from the owner node name (`app/owner_urls.py`) and resolve
-  on the CB host via `/etc/hosts`.
+### Step 1: Bank Submits Application (Autonomous Key Generation)
+The commercial bank prepares its peer and local CA inside its own perimeter, generates its signing keys in an HSM, and submits its public organization definition:
+```bash
+curl -X POST https://centralbank.sworna.gov/api/v1/onboarding/apply \
+  -H "Content-Type: application/json" \
+  -d '{
+    "legal_name": "Standard Chartered Demo Bank",
+    "swift_bic": "SCBLUS33",
+    "msp_id": "Bank003MSP",
+    "endpoint": "peer0.bank003.sworna.example.com:13051",
+    "ca_endpoint": "ca.bank003.sworna.example.com:10054",
+    "public_msp_json": "<Base64_Encoded_Org_JSON>",
+    "compliance_contact": "compliance@bank003.com"
+  }'
+```
 
-## 4. Deployment sequence
+### Step 2: Central Bank Compliance & Security Verification
+The Central Bank automated verifier performs:
+- License validation against the national banking register.
+- TLS probing of the bank's endpoint (`peer0.bank003.sworna.example.com:13051`).
+- Capital adequacy and reserve allocation validation.
+
+### Step 3: Central Bank Board Dual-Approval (Four-Eyes Principle)
+Two Central Bank executives sign the admission proposal using their hardware tokens:
+1. **Monetary Policy Officer:** Approves reserve vault quota and interbank limits (`POST /api/v1/admin/onboarding/{id}/approve-monetary`).
+2. **CISO:** Approves cryptographic MSP definition (`POST /api/v1/admin/onboarding/{id}/approve-security`).
+
+### Step 4: Channel Delta & Autonomous Channel Join
+1. Central Bank creates and signs the channel configuration update adding `Bank003MSP` to the `settlement` channel.
+2. The ordering cluster commits the configuration block.
+3. The bank receives an automated webhook with the channel update receipt.
+4. The commercial bank executes `peer channel join` against the public orderer endpoint independently.
+
+---
+
+---
+
+## 4. Single-Node & Multi-VM Operations with `sworna-cli`
+
+All deployments are driven via the unified `sworna` CLI (`./bin/sworna` or `pip install -e ./cli`).
+
+### Prerequisites:
+- 16+ GB RAM, 4+ CPU cores.
+- Docker Engine ≥ 26 with Docker Compose v2.
+- Python 3.10+ (standard library only).
+
+### Operations Workflow:
 
 ```bash
-# CB VM
-./scripts/deploy-centralbank.sh --provision
-#   -> org1 network + chaincode approved + engine + portal (registry starts empty)
+# 1. Central Bank initialization (Orderer, CB Peer, CCaaS, Issuer, Auditor, Backend, Portal)
+./bin/sworna cb init --provision
 
-# CB VM — register a bank at runtime (while everything is up)
-curl -X POST http://localhost:8000/api/v1/banks -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"code":"001","name":"my bank","msp_id":"Bank1MSP","owner_node":"owner1","staff_username":"mybank_admin"}'
-./scripts/export-join-bundles.sh        # -> dist-bank-bundles/bank001.tar.gz
+# 2. Check Central Bank status
+./bin/sworna cb status
 
-# Bank k VM (after extracting its bundle)
-export SWORNA_CB_HOST=<CB-IP> SWORNA_OWNERS="owner1 ..." SWORNA_OWNER_OWNER1_HOST=<bank1-IP> ...
-./scripts/deploy-bank.sh 001            # identity phase -> bank1-org.json
+# 3. Mint wholesale CBDC to a bank (e.g. 10,000 SWR to Bank 001)
+./bin/sworna cb mint --bank 001 --amount 10000.0
 
-# CB VM — add the bank to the channel (live, no downtime)
-./scripts/onboard-bank.sh Bank1MSP bank1-org.json
+# 4. Multi-VM Bank Onboarding:
+# On the Bank VM:
+./bin/sworna bank init --code 001 --cb-host <CB_IP>
+# (Submit network/bank1-org.json for CB approval via Portal http://<CB_IP>:5273/onboarding)
+./bin/sworna bank start --code 001 --cb-host <CB_IP>
 
-# Bank k VM — re-run to join + start
-./scripts/deploy-bank.sh 001
-
-# CB VM — update the endorsement policy (after each new bank)
-./scripts/commit-chaincode.sh
+# 5. Automated End-to-End Verification (Mint, Interbank ZKP Transfer, Ledger Verification)
+./bin/sworna test e2e
 ```
 
-## 5. Ports
+### Port Mapping Reference:
 
-| Port | Service | Host |
-|---|---|---|
-| 7050 · 7053 | orderer | CB |
-| 7051 | peer0.centralbank | CB |
-| 9051+2000(k−1) | peer0.bank{k} | bank k |
-| 7054 · 9054 | ca_org1 · ca_orderer | CB |
-| 8054+1000(k−1) | ca_bank{k} | bank k |
-| 27054 | token CA | CB |
-| 9000 · 9100 | auditor / issuer | CB |
-| 9200+100(k−1) | owner{k} REST | bank k |
-| 9201+100(k−1) | owner{k} P2P | bank k |
-| 8000 | backend | CB |
-| 5173 | portals (web dev) | each host |
+| Entity | Portal / UI | API Port | Fabric Peer | Owner FSC |
+|---|---|---|---|---|
+| **Central Bank** | `http://localhost:5273` | `:8100` | `:7051` | `:9100` (Issuer) / `:9000` (Auditor) |
+| **Bank 001** | `http://localhost:5273/b/001` | `:8100` | `:9051` | `:9200` |
+| **Bank 002** | `http://localhost:5273/b/002` | `:8100` | `:11051` | `:9300` |
+| **Bank 003** | `http://localhost:5273/b/003` | `:8100` | `:13051` | `:9400` |
+| **Bank 004** | `http://localhost:5273/b/004` | `:8100` | `:15051` | `:9500` |
+| **Bank 005** | `http://localhost:5273/b/005` | `:8100` | `:17051` | `:9600` |
 
-Services bind `0.0.0.0`, reachable at `http://<tailnet-ip>:<port>`.
+---
 
-## 6. Progression
+## 5. Security Hardening Checklist (Production Go-Live)
 
-- **Dev (this repo, one laptop):** all-in-one is **testing only**, never a
-  deployment — the CB and every bank are always separated onto their own hosts.
-- **Lab demo (N VMs):** the flow in §4; cross-host DNS via generated
-  `extra_hosts` + `/etc/hosts` — see
-  [docs/token-network/09-distributed-deployment.md](token-network/09-distributed-deployment.md).
-- **Comprehensive (up to 25 machines):** more orderers, CouchDB, monitoring,
-  Ansible — Phase 4.
-
-## 7. References
-
-- Runbook: [SETUP.md](SETUP.md)
-- Distributed validation: [docs/token-network/09-distributed-deployment.md](token-network/09-distributed-deployment.md)
-- Provisioning model: [docs/token-network/08-provisioning.md](token-network/08-provisioning.md)
-- Token network design: [docs/token-network/](token-network/)
-- API: [docs/API.md](API.md)
+- [ ] **HSM Integration:** Bind all Fabric peer signing keys, Idemix issuer keys, and Auditor keys to PKCS#11 compliant Hardware Security Modules.
+- [ ] **Engine mTLS:** Configure mutual TLS between FastAPI backend adapters and Go FSC owner/issuer/auditor engines (`:9000`, `:9100`, `:9200`).
+- [ ] **Ordering Cluster:** Deploy a 4-node SmartBFT ordering cluster across at least 3 distinct availability zones or institutions.
+- [ ] **PostgreSQL Cluster:** Migrate off-chain registries from local SQLite to high-availability clustered PostgreSQL with row-level locks.
+- [ ] **Event-Driven Finality:** Configure backend block-event listeners to confirm transactions only after Fabric block commitment.
+- [ ] **Session Security:** Enforce encrypted, HttpOnly, SameSite=Strict cookies with short-lived JWTs and Redis session blacklisting.

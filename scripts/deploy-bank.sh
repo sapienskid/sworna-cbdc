@@ -55,21 +55,25 @@ bank_join() {
 
 bank_engine() {
   echo "==> bank ${BANK_CODE}: owner FSC service"
+  "$ROOT/scripts/bank-network.sh" conf
   python3 "$ROOT/scripts/gen-net-overrides.py" bank "$ROOT/token-services/docker-compose.bank.net.yaml"
   export OWNER_NODE="owner${k}"
   export OWNER_HOSTNAME="owner${k}"
   export OWNER_REST_PORT
   export OWNER_P2P_PORT=$((9201 + 100 * (k - 1)))
   cd "$ROOT/token-services"
-  docker compose -f docker-compose.bank.yaml -f docker-compose.bank.net.yaml up -d --build owner
+  docker compose -p "bank${BANK_CODE}-owner" -f docker-compose.bank.yaml -f docker-compose.bank.net.yaml up -d --build owner
 }
 
 bank_backend() {
-  echo "==> bank ${BANK_CODE}: banking backend (:8000)"
+  echo "==> bank ${BANK_CODE}: banking backend"
+  if curl -sf http://localhost:8100/healthz >/dev/null 2>&1 || curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then
+    echo "    Banking backend already active in Docker — skipping host process."
+    return 0
+  fi
   cd "$ROOT/backend"
   [ -d .venv ] || python3 -m venv .venv
   ./.venv/bin/pip install -q -r requirements.txt
-  # The bank's owner engine is local; issuer/auditor live on the CB host.
   ( setsid env \
       SWORNA_ISSUER_URL="http://${SWORNA_CB_HOST}:9100/api/v1" \
       SWORNA_AUDITOR_URL="http://${SWORNA_CB_HOST}:9000/api/v1" \
@@ -80,6 +84,10 @@ bank_backend() {
 
 bank_portal() {
   echo "==> bank ${BANK_CODE}: portal"
+  if curl -sf http://localhost:5273 >/dev/null 2>&1 || curl -sf http://localhost:5173 >/dev/null 2>&1; then
+    echo "    Portal already active in Docker — skipping host process."
+    return 0
+  fi
   cd "$ROOT/web"
   npm install --silent
   (setsid npm run dev > /tmp/sworna-web.log 2>&1 &)

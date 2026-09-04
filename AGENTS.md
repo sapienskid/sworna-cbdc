@@ -3,16 +3,18 @@
 Quickstart for AI agents and anyone automating this repo. The authoritative
 runbook is [docs/SETUP.md](docs/SETUP.md); read it before doing anything.
 
-## Roles & the one command each
+## Roles & the unified commands
 
-| Role | Command | Notes |
-|---|---|---|
-| Central bank | `./scripts/deploy-centralbank.sh --provision` | org1 network + channel + chaincode (approved, not committed) + engine + portal; exports join bundles |
-| **Add a bank (one step)** | `./scripts/add-bank.sh 00k [<BANK-VM-IP>]` | **run on the CB host**; registers, provisions, syncs the repo, runs the bank identity, onboards to the channel, starts the bank's services and commits the chaincode. Idempotent. No IP = all-in-one on the CB VM |
-| Bank peer (low-level) | `BANK_CODE=00k ./scripts/bank-network.sh up\|identity\|join\|down` | building block used by add-bank.sh; identity exports `bank{k}-org.json`; join needs CB onboarding |
-| Commit chaincode only | `./scripts/commit-chaincode.sh` | CB host; normally already done by add-bank.sh |
-| Export bundles | `./scripts/export-join-bundles.sh` | CB host → `dist-bank-bundles/bank<CODE>.tar.gz` |
-| Teardown | `./network/network.sh down` | also `rm -rf token-services/{keys,data} backend/sworna.db dist-bank-bundles network/bank-hosts.env` for a full reset |
+| Role | Unified CLI Command | Script Fallback | Notes |
+|---|---|---|---|
+| **Unified E2E Verification** | `./bin/sworna test e2e` | - | Automated end-to-end verification (mint, interbank ZKP transfer, balances) |
+| **Central bank** | `./bin/sworna cb init --provision` | `./scripts/deploy-centralbank.sh --provision` | Orderer + Central Bank Peer + CAs + Issuer/Auditor + Backend (:8100) + Portal (:5273) in Docker |
+| **Add a bank (one step)** | `./scripts/add-bank.sh 00k [<BANK-VM-IP>]` | - | **run on the CB host**; registers, provisions, syncs repo, onboards to channel, commits chaincode |
+| **Commercial Bank (VM)** | `./bin/sworna bank init --code 00k --cb-host <IP>` | `BANK_CODE=00k ./scripts/bank-network.sh identity` | Generates local MSP keys; exports `bank{k}-org.json` for CB approval |
+| **Bank Start (VM)** | `./bin/sworna bank start --code 00k --cb-host <IP>` | `BANK_CODE=00k ./scripts/bank-network.sh up\|join` | Joins settlement channel, starts FSC owner engine |
+| Commit chaincode only | `./scripts/commit-chaincode.sh` | - | CB host; normally already done by add-bank.sh |
+| Export bundles | `./scripts/export-join-bundles.sh` | - | CB host → `dist-bank-bundles/bank<CODE>.tar.gz` |
+| Teardown | `./bin/sworna cb down` | `./network/network.sh down` | Teardown CB containers and channel |
 
 Host IPs of onboarded banks live in `network/bank-hosts.env` (written by
 add-bank.sh); all deploy scripts source it as a fallback, so

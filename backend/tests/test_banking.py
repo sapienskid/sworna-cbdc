@@ -15,10 +15,12 @@ reset (`docs/SETUP.md` §9).
 """
 from __future__ import annotations
 
+import os
 import httpx
 import pytest
 
-BACKEND = "http://localhost:8000/api/v1"
+BACKEND_BASE = os.getenv("SWORNA_BACKEND_BASE", "http://localhost:8100").rstrip("/")
+BACKEND = f"{BACKEND_BASE}/api/v1"
 
 CB = ("cbadmin", "sworna-cb")
 BANK_A = {"code": "901", "name": "pytest-bank-a", "msp_id": "Bank901MSP",
@@ -78,7 +80,7 @@ def banks_provisioned(client: httpx.Client, cb_token: str) -> dict:
 # -- pure API tests (no owner node needed) ---------------------------------
 
 def test_health(client: httpx.Client):
-    assert client.get("http://localhost:8000/healthz").json() == {"status": "ok"}
+    assert client.get(f"{BACKEND_BASE}/healthz").json() == {"status": "ok"}
 
 
 def test_bad_login(client: httpx.Client):

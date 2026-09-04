@@ -31,6 +31,7 @@ network/organizations/ordererOrganizations/
 network/organizations/fabric-ca/org1/
 network/organizations/fabric-ca/org2/
 network/organizations/fabric-ca/ordererOrg/
+network/organizations/fabric-ca/bank*/
 network/organizations/ca/
 *.block
 channel-artifacts/
@@ -62,7 +63,8 @@ keys/
 *.log
 logs/
 # Fabric binaries + config (installed by scripts/install-fabric-tools.sh)
-bin/
+bin/*
+!bin/sworna
 config/
 
 # Provisioning client home (token CA)

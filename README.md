@@ -24,36 +24,30 @@ A two-tier Central Bank Digital Currency (CBDC) platform built on Hyperledger Fa
 - **[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md)** — trust model, cryptography, auth, and known limitations.
 - **[docs/FRONTEND.md](docs/FRONTEND.md)** — the three-portal React app: architecture and conventions.
 
-### Web Portals
+### Web Portals & APIs
 
-- **Central Bank Console:** `http://100.72.112.29:8000` (or `:5173`) — `cbadmin` / `sworna-cb`
-- **Bank A Portal:** `http://100.111.120.73:8000` — `bankadmin` / `sworna-bank`
-- **Bank B Portal:** `http://100.71.149.60:8000` — `bankadmin` / `sworna-bank`
+- **Central Bank Portal:** `http://localhost:5273` (or `<CB_IP>:5273`) — `cbadmin` / `sworna-cb`
+- **Central Bank API:** `http://localhost:8100/docs` (Swagger UI)
+- **Commercial Bank Portals:** `http://localhost:5273/b/001` through `/b/005`
 
-### Deploy Order — one step per host
+### Deploy & Verify with `sworna-cli`
 
+```bash
+# 1. Central Bank VM (Orderer, CB Peer, CCaaS, Issuer, Auditor, Backend, Portal)
+./bin/sworna cb init --provision
+
+# 2. Verify all Central Bank services
+./bin/sworna cb status
+
+# 3. Add a commercial bank (VM mode):
+# On Bank VM:
+./bin/sworna bank init --code 001 --cb-host <CB_IP>
+# Central Bank approves onboarding via Web Portal (http://<CB_IP>:5273/onboarding)
+./bin/sworna bank start --code 001 --cb-host <CB_IP>
+
+# 4. Run automated End-to-End verification (Wholesale Mint + ZKP Transfer + Balance Check)
+./bin/sworna test e2e
 ```
-# 1. Central Bank VM (network + engine + backend + portal)
-./scripts/deploy-centralbank.sh --provision
-
-# 2. Add a bank — EVERYTHING else is automated from the CB host:
-./scripts/add-bank.sh 001                 # bank on the CB VM itself (all-in-one demo)
-./scripts/add-bank.sh 001 <BANK-VM-IP>    # bank on its own VM (driven over SSH)
-
-#    ...more banks, same one command:
-./scripts/add-bank.sh 002 <BANK-VM-IP-2>
-```
-
-`add-bank.sh` registers the bank, provisions its token wallets, syncs the
-repo to the bank VM, runs its identity phase, admits it to the `settlement`
-channel (live), joins + starts its services, commits the chaincode policy and
-verifies. Idempotent — re-run to resume. Options: `--name`, `--pool`,
-`--user`, `--repo-dir`, `--no-sync`, `--skip-portal`, `--dry-run` (see the
-script header). The manual step-by-step equivalent is in
-[docs/SETUP.md](docs/SETUP.md) §5–6.
-
-Prerequisites for the remote mode: SSH key access to the bank VM
-(`ssh-copy-id <user>@<ip>`), docker + docker compose v2 on both hosts.
 
 ## Architecture
 
@@ -64,15 +58,14 @@ Central Bank (CB VM)
   ├── Issuer FSC               :9100 / :9101 (P2P)
   ├── Auditor FSC              :9000 / :9001 (P2P)
   ├── Token CA                 :27054
-  ├── Backend API              :8000
-  └── CB Portal                :5173
+  ├── Central Bank Backend     :8100 (Docker container)
+  └── Central Bank Portal      :5273 (Docker container)
 
-Bank A VM
-  ├── Fabric Peer (Bank1)      :9051
-  ├── Owner FSC (owner1)       :9200 / :9201 (P2P)
-  ├── Bank Fabric CA           :8054
-  ├── Backend API              :8000
-  └── Bank Portal              :5173
+Commercial Bank VMs (Banks 001..005)
+  ├── Fabric Peer (Bank k)     :7051 (internal) / :9051+2000*(k-1)
+  ├── Owner FSC (owner k)      :9200+100*(k-1) / :9201+100*(k-1) (P2P)
+  └── Bank Fabric CA           :7054 (internal) / :20055+k
+```
 
 Bank B VM
   ├── Fabric Peer (Bank2)      :11051

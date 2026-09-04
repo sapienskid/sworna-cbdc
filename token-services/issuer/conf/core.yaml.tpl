@@ -46,10 +46,7 @@ fabric:
     mspConfigPath: /var/fsc/fabric/organizations/peerOrganizations/centralbank.sworna.example.com/users/User1@centralbank.sworna.example.com/msp
     defaultMSP: CentralBankMSP
     msps:
-      - id: CentralBankMSP
-        mspType: bccsp
-        mspID: CentralBankMSP
-        path: /var/fsc/fabric/organizations/peerOrganizations/centralbank.sworna.example.com/users/User1@centralbank.sworna.example.com/msp
+@@ALL_MSPS@@
     tls:
       enabled: true
     # If the keepalive values are too low, Fabric peers will complain with: ENHANCE_YOUR_CALM, debug data: "too_many_pings"

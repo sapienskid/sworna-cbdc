@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import SessionLocal, engine
 from .models import Base
-from .routers import admin, auth, payments, registry
+from .routers import admin, auth, onboarding, payments, registry
 from .seed import seed
 from .token_client import token_client
 
@@ -44,6 +44,7 @@ app.include_router(auth.router)
 app.include_router(registry.router)
 app.include_router(payments.router)
 app.include_router(admin.router)
+app.include_router(onboarding.router)
 
 
 @app.get("/healthz")

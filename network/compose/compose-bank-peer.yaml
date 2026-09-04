@@ -18,6 +18,7 @@
 networks:
   test:
     name: fabric_test
+    external: true
 
 volumes:
   peer-data:
@@ -74,9 +75,6 @@ services:
       - peer-data:/var/hyperledger/production
       - ./docker/peercfg:/etc/hyperledger/peercfg
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/host/var/run/docker.sock
-    extra_hosts:
-      - "orderer.sworna.example.com:${SWORNA_CB_HOST:?SWORNA_CB_HOST (CB host IP) must be set}"
-      - "peer0.centralbank.sworna.example.com:${SWORNA_CB_HOST}"
     working_dir: /root
     command: peer node start
     ports:

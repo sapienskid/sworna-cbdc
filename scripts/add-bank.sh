@@ -103,12 +103,18 @@ owner_host_env() {
 # ------------------------------------------------------------ preflight -----
 log "Bank $BANK_CODE ($BANK_NAME) → ${BANK_HOST:-this VM}  [$BANK_MSP / $OWNER_NODE]"
 
-BACKEND="${SWORNA_BACKEND:-http://localhost:8000/api/v1}"
+if [ -z "${SWORNA_BACKEND:-}" ]; then
+  if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then
+    BACKEND="http://localhost:8000/api/v1"
+  else
+    BACKEND="http://localhost:8100/api/v1"
+  fi
+fi
 command -v jq >/dev/null || die "jq is required on the CB host"
 command -v docker >/dev/null || die "docker is required on the CB host"
 if [ "$DRY" != "1" ]; then
-  curl -sf http://localhost:8000/healthz >/dev/null 2>&1 \
-    || die "backend not reachable on :8000 — deploy the central bank first (deploy-centralbank.sh)"
+  curl -sf "${BACKEND%/api/v1}/healthz" >/dev/null 2>&1 \
+    || die "backend not reachable on $BACKEND — deploy the central bank first (deploy-centralbank.sh)"
 fi
 
 if [ "$REMOTE" = "1" ]; then

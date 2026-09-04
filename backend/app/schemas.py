@@ -272,3 +272,47 @@ class StatementItem(BaseModel):
     recipient: str
     status: str
     timestamp: str
+
+
+# onboarding
+class OnboardingApplicationCreate(BaseModel):
+    bank_code: str = Field(pattern=r"^\d{3}$", description="3-digit bank code, e.g. 001")
+    legal_name: str
+    msp_id: str
+    owner_node: str
+    peer_endpoint: str
+    ca_endpoint: str
+    portal_url: str = ""
+    public_msp_json: dict = Field(default_factory=dict)
+    pool_size: int = Field(default=10, ge=1, le=100)
+
+
+class OnboardingApplicationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    bank_code: str
+    legal_name: str
+    msp_id: str
+    owner_node: str
+    peer_endpoint: str
+    ca_endpoint: str
+    portal_url: str
+    public_msp_json: dict
+    pool_size: int
+    status: str
+    monetary_officer: str
+    monetary_approved_at: datetime | None
+    interbank_limit_minor: int
+    security_officer: str
+    security_approved_at: datetime | None
+    rejection_reason: str
+    created_at: datetime
+
+
+class MonetaryApprovalRequest(BaseModel):
+    interbank_limit_minor: int = Field(default=10_000_000, ge=0, description="0 = unlimited")
+
+
+class SecurityApprovalRequest(BaseModel):
+    approve: bool = True
+    rejection_reason: str = ""

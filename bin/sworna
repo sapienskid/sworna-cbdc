@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONPATH="$ROOT/cli:$PYTHONPATH"
+exec python3 -m sworna.main "$@"

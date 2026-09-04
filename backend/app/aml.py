@@ -87,16 +87,25 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def screen_name(session: Session, full_name: str) -> list[WatchlistEntry]:
-    """Return active watchlist entries whose value appears in the name."""
+def screen_name(session: Session, full_name: str, threshold: float = 85.0) -> list[WatchlistEntry]:
+    """Return active watchlist entries matching the name using RapidFuzz fuzzy partial ratio."""
     value = _norm(full_name)
     if not value:
         return []
+    try:
+        from rapidfuzz import fuzz
+    except ImportError:
+        fuzz = None
+
     entries = session.scalars(select(WatchlistEntry).where(WatchlistEntry.active)).all()
     hits = []
     for e in entries:
         needle = _norm(e.value)
-        if needle and needle in value:
+        if not needle:
+            continue
+        if needle in value:
+            hits.append(e)
+        elif fuzz is not None and fuzz.partial_ratio(needle, value) >= threshold:
             hits.append(e)
     return hits
 
