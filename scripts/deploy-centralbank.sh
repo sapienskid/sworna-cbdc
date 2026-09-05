@@ -95,10 +95,11 @@ if [ "$PROVISION" = "1" ]; then
     echo "     ./scripts/export-join-bundles.sh   # re-export their bundles"
   fi
   for code in $codes; do
-    curl -sf -X POST "http://localhost:8000/api/v1/admin/banks/$code/provision" \
+    curl -sf -X POST "http://localhost:${BACKEND_PORT}/api/v1/admin/banks/$code/provision" \
       -H "Authorization: Bearer $TOKEN" \
       >/dev/null && echo "   provisioned bank $code" || echo "   (provision $code failed — retry from the CB portal)"
   done
+
 fi
 
 echo "==> exporting per-bank join bundles (token wallets + orderer public certs)"
@@ -106,9 +107,8 @@ echo "==> exporting per-bank join bundles (token wallets + orderer public certs)
 
 echo
 echo "Central-bank host ready."
-echo "  portal   http://localhost:5173   (login: cbadmin / sworna-cb)"
-echo "  backend  http://localhost:8000/docs"
-echo "  engine   http://localhost:8080"
+echo "  portal   http://${SWORNA_CB_HOST:-localhost}:${PORTAL_PORT}   (login: cbadmin / sworna-cb)"
+echo "  backend  http://${SWORNA_CB_HOST:-localhost}:${BACKEND_PORT}/docs"
 echo
 echo "Onboard a bank in ONE step (while this host stays up):"
 echo

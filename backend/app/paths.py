@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(os.getenv("SWORNA_REPO_ROOT", str(Path(__file__).resolve().parent.parent.parent)))
 
 BIN = os.getenv("SWORNA_BIN", str(REPO_ROOT / "bin"))
 TOKEN_SERVICES = os.getenv("SWORNA_TOKEN_SERVICES", str(REPO_ROOT / "token-services"))
