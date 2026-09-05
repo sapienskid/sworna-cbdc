@@ -67,7 +67,12 @@ check_bundle() {
   return $missing
 }
 
+ensure_network() {
+  docker network inspect fabric_test >/dev/null 2>&1 || docker network create fabric_test
+}
+
 bank_ca_up() {
+  ensure_network
   export BANK_ORG BANK_MSP BANK_PEER_PORT BANK_CC_PORT BANK_CA_PORT \
          BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
          SWORNA_CB_HOST="${SWORNA_CB_HOST:?SWORNA_CB_HOST (CB host IP) must be set}" \
@@ -84,6 +89,7 @@ bank_ca_up() {
 }
 
 bank_peer_up() {
+  ensure_network
   check_bundle
   export BANK_ORG BANK_MSP BANK_PEER_PORT BANK_CC_PORT BANK_CA_PORT \
          BANK_CA_NAME BANK_CA_CONT BANK_CA_DATA CCAAS_PEERNAME \
@@ -135,7 +141,7 @@ render_conf() {
   OWNER_NODE="$OWNER_NODE" OWNER_INDEX="$k" BANK_ORG="$BANK_ORG" BANK_MSP="$BANK_MSP" \
     PEER_PORT="$BANK_PEER_PORT" OWNER_P2P="$OWNER_P2P_PORT" BANK_CODE="$BANK_CODE" \
     POOL_SIZE="${POOL_SIZE:-10}" DEMO_WALLETS="${DEMO_WALLETS:-}" \
-    OWNERS="${SWORNA_OWNERS:?SWORNA_OWNERS (all owner nodes) must be set}" \
+    OWNERS="${SWORNA_OWNERS:-owner1 owner2 owner3 owner4 owner5}" \
     python3 "$ROOT/scripts/render-owner-conf.py" "$tpl" > "$out"
 }
 

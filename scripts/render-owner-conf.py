@@ -81,12 +81,36 @@ if bank_code:
             "          - id: %s%s\n            path: /var/fsc/keys/%s/wallet/%s/msp\n            type: idemix" % (wid, is_default, owner_node, wid)
         )
 
-all_msps = [
-    "      - id: CentralBankMSP\n"
-    "        mspType: bccsp\n"
-    "        mspID: CentralBankMSP\n"
-    "        path: /var/fsc/fabric/organizations/peerOrganizations/centralbank.sworna.example.com/msp"
+all_msps = []
+cb_msp_candidates = [
+    os.path.join("..", "network", "organizations", "peerOrganizations", "centralbank.sworna.example.com", "msp"),
+    os.path.join(opt("SWORNA_NETWORK_HOME"), "organizations", "peerOrganizations", "centralbank.sworna.example.com", "msp"),
+    os.path.join(os.path.dirname(__file__), "..", "network", "organizations", "peerOrganizations", "centralbank.sworna.example.com", "msp"),
 ]
+if any(c and os.path.exists(c) for c in cb_msp_candidates):
+    all_msps.append(
+        "      - id: CentralBankMSP\n"
+        "        mspType: bccsp\n"
+        "        mspID: CentralBankMSP\n"
+        "        path: /var/fsc/fabric/organizations/peerOrganizations/centralbank.sworna.example.com/msp"
+    )
+
+if bank_org and bank_msp:
+    b_msp_candidates = [
+        os.path.join("..", "network", "organizations", "peerOrganizations", f"{bank_org}.sworna.example.com", "msp"),
+        os.path.join(opt("SWORNA_NETWORK_HOME"), "organizations", "peerOrganizations", f"{bank_org}.sworna.example.com", "msp"),
+        os.path.join(os.path.dirname(__file__), "..", "network", "organizations", "peerOrganizations", f"{bank_org}.sworna.example.com", "msp"),
+    ]
+    if any(c and os.path.exists(c) for c in b_msp_candidates):
+        entry = (
+            f"      - id: {bank_msp}\n"
+            f"        mspType: bccsp\n"
+            f"        mspID: {bank_msp}\n"
+            f"        path: /var/fsc/fabric/organizations/peerOrganizations/{bank_org}.sworna.example.com/msp"
+        )
+        if entry not in all_msps:
+            all_msps.append(entry)
+
 for node in owners:
     m = re.fullmatch(r"owner(\d+)", node)
     if m:
@@ -98,12 +122,14 @@ for node in owners:
             os.path.join(os.path.dirname(__file__), "..", "network", "organizations", "peerOrganizations", f"bank{k}.sworna.example.com", "msp"),
         ]
         if any(c and os.path.exists(c) for c in msp_candidates):
-            all_msps.append(
+            entry = (
                 "      - id: Bank%sMSP\n"
                 "        mspType: bccsp\n"
                 "        mspID: Bank%sMSP\n"
                 "        path: /var/fsc/fabric/organizations/peerOrganizations/bank%s.sworna.example.com/msp" % (k, k, k)
             )
+            if entry not in all_msps:
+                all_msps.append(entry)
 
 with open(sys.argv[1]) as f:
     tpl = f.read()

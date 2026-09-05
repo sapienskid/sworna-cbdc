@@ -99,13 +99,14 @@ echo "    Central Bank API is reachable!"
 
 # Step 2: Generate local keys via Bank CA in Docker
 echo "==> [2/5] Generating local Fabric keys & CA identities..."
+docker network inspect fabric_test >/dev/null 2>&1 || docker network create fabric_test
 export BANK_CODE SWORNA_CB_HOST="$CB_HOST"
 (cd "$ROOT" && ./scripts/bank-network.sh identity)
 
 ORG_JSON="$ROOT/network/${BANK_ORG}-org.json"
 [ -f "$ORG_JSON" ] || { echo "ERROR: ${ORG_JSON} not found"; exit 1; }
 
-# Step 3: Submit application to Central Bank
+# Step 3: Submit admission application to Central Bank
 echo "==> [3/5] Submitting admission application to Central Bank..."
 APP_JSON=$(jq -n \
   --arg code "$BANK_CODE" \
@@ -163,10 +164,10 @@ echo "==> [5/5] Joining channel 'settlement' and launching containers..."
 (cd "$ROOT" && BANK_CODE="$BANK_CODE" SWORNA_CB_HOST="$CB_HOST" ./scripts/bank-network.sh join)
 
 echo "==> Starting FSC Owner engine..."
+export SWORNA_OWNERS="${SWORNA_OWNERS:-owner1 owner2 owner3 owner4 owner5}"
+export SWORNA_CB_HOST="$CB_HOST"
 "$ROOT/scripts/bank-network.sh" conf
-SWORNA_OWNERS="${SWORNA_OWNERS:-owner1 owner2 owner3 owner4 owner5}" \
-SWORNA_CB_HOST="$CB_HOST" \
-  python3 "$ROOT/scripts/gen-net-overrides.py" bank "$ROOT/token-services/docker-compose.bank.net.yaml"
+python3 "$ROOT/scripts/gen-net-overrides.py" bank "$ROOT/token-services/docker-compose.bank.net.yaml"
 
 export OWNER_NODE OWNER_HOSTNAME="$OWNER_NODE" OWNER_REST_PORT OWNER_P2P_PORT
 (cd "$ROOT/token-services" && docker compose -p "bank${BANK_CODE}-owner" \
