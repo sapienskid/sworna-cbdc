@@ -91,12 +91,19 @@ for node in owners:
     m = re.fullmatch(r"owner(\d+)", node)
     if m:
         k = m.group(1)
-        all_msps.append(
-            "      - id: Bank%sMSP\n"
-            "        mspType: bccsp\n"
-            "        mspID: Bank%sMSP\n"
-            "        path: /var/fsc/fabric/organizations/peerOrganizations/bank%s.sworna.example.com/msp" % (k, k, k)
-        )
+        # Only add bank MSP if directory actually exists on this host
+        msp_candidates = [
+            os.path.join("..", "network", "organizations", "peerOrganizations", f"bank{k}.sworna.example.com", "msp"),
+            os.path.join(opt("SWORNA_NETWORK_HOME"), "organizations", "peerOrganizations", f"bank{k}.sworna.example.com", "msp"),
+            os.path.join(os.path.dirname(__file__), "..", "network", "organizations", "peerOrganizations", f"bank{k}.sworna.example.com", "msp"),
+        ]
+        if any(c and os.path.exists(c) for c in msp_candidates):
+            all_msps.append(
+                "      - id: Bank%sMSP\n"
+                "        mspType: bccsp\n"
+                "        mspID: Bank%sMSP\n"
+                "        path: /var/fsc/fabric/organizations/peerOrganizations/bank%s.sworna.example.com/msp" % (k, k, k)
+            )
 
 with open(sys.argv[1]) as f:
     tpl = f.read()
