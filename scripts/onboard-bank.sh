@@ -98,6 +98,8 @@ else
 fi
 export SWORNA_OWNERS
 
+cd "$ROOT/token-services"
+
 infoln "regenerating cross-host DNS override"
 python3 "$ROOT/scripts/gen-net-overrides.py" cb docker-compose.net.yaml
 
