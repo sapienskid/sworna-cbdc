@@ -51,12 +51,22 @@ down() {
 
 # Auto-detect this VM's IP if not provided
 if [ -z "$MY_HOST" ]; then
-  # 1. Try Tailscale IP
-  if command -v tailscale >/dev/null 2>&1 && tailscale ip -4 >/dev/null 2>&1; then
+  # 1. First try the route to CB_HOST (matches LAN, Wi-Fi, Ethernet, or Tailscale)
+  MY_HOST=$(ip route get "$CB_HOST" 2>/dev/null | grep -oP 'src \K\S+' || true)
+
+  # 2. Try default route IP
+  if [ -z "$MY_HOST" ]; then
+    MY_HOST=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' || true)
+  fi
+
+  # 3. Fallback to Tailscale if present
+  if [ -z "$MY_HOST" ] && command -v tailscale >/dev/null 2>&1 && tailscale ip -4 >/dev/null 2>&1; then
     MY_HOST=$(tailscale ip -4 | head -1)
-  else
-    # 2. Try default route IP
-    MY_HOST=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' || hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+
+  # 4. Fallback to hostname -I
+  if [ -z "$MY_HOST" ]; then
+    MY_HOST=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   fi
 fi
 [ -n "$MY_HOST" ] || MY_HOST="127.0.0.1"
