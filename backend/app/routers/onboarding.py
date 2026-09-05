@@ -152,22 +152,7 @@ def _execute_security_approval(
             with open(hosts_env, "a") as f:
                 f.write(f"\nSWORNA_OWNER_OWNER{k}_HOST={host_part}\n")
 
-    # 3. Admit the org to the Fabric channel if on-chain script exists
-    skip_onchain = os.getenv("SWORNA_SKIP_ONCHAIN_ADMISSION", "0") == "1"
-    onboard_script = REPO_ROOT / "scripts" / "onboard-bank.sh"
-    if not skip_onchain and onboard_script.exists() and org_file.exists():
-        proc = subprocess.run(
-            [str(onboard_script), app.msp_id, str(org_file)],
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            raise HTTPException(
-                502, f"On-chain channel admission failed: {proc.stderr.strip()[-500:]}"
-            )
-
-    # 4. Create or activate the Bank record in the database
+    # 3. Create or activate the Bank record in the database
     bank = session.scalar(select(Bank).where(Bank.code == app.bank_code))
     if not bank:
         bank = Bank(
@@ -202,12 +187,27 @@ def _execute_security_approval(
     session.commit()
     session.refresh(bank)
 
-    # 5. Provision the Idemix token wallet pool for the bank
+    # 4. Provision the Idemix token wallet pool & FSC node identity for the bank
     try:
         provision_wallet_pool(bank)
         session.commit()
     except Exception:
         pass
+
+    # 5. Admit the org to the Fabric channel if on-chain script exists
+    skip_onchain = os.getenv("SWORNA_SKIP_ONCHAIN_ADMISSION", "0") == "1"
+    onboard_script = REPO_ROOT / "scripts" / "onboard-bank.sh"
+    if not skip_onchain and onboard_script.exists() and org_file.exists():
+        proc = subprocess.run(
+            [str(onboard_script), app.msp_id, str(org_file)],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise HTTPException(
+                502, f"On-chain channel admission failed: {proc.stderr.strip()[-500:]}"
+            )
 
     # 6. Export join bundle
     try:

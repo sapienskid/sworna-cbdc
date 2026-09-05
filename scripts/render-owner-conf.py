@@ -45,6 +45,17 @@ resolvers = []
 for node in owners:
     if node == owner_node:
         continue
+    cert_found = False
+    for candidate in [
+        os.path.join("keys", node, "fsc", "msp", "signcerts", "cert.pem"),
+        os.path.join(opt("SWORNA_TOKEN_SERVICES"), "keys", node, "fsc", "msp", "signcerts", "cert.pem"),
+        os.path.join(os.path.dirname(__file__), "..", "token-services", "keys", node, "fsc", "msp", "signcerts", "cert.pem"),
+    ]:
+        if candidate and os.path.exists(candidate):
+            cert_found = True
+            break
+    if not cert_found:
+        continue
     host = opt(f"SWORNA_OWNER_{node.upper()}_HOST", "127.0.0.1")
     resolvers.append(
         "      - name: %s\n"

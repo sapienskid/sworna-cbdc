@@ -34,6 +34,9 @@ mkdir -p "$ROOT/token-services/keys/ca" "$ROOT/token-services/data/auditor" "$RO
 if [ ! -w "$ROOT/token-services/keys" ]; then
   docker run --rm -v "$ROOT/token-services:/ts" busybox chmod -R 777 /ts/keys 2>/dev/null || true
 fi
+if [ ! -e /app ]; then
+  docker run --rm -v /:/host busybox ln -s "$ROOT" /host/app 2>/dev/null || true
+fi
 
 cd "$ROOT/network"
 
