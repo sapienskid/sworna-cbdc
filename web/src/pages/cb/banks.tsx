@@ -17,7 +17,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { api, type Bank, type BankPermissions } from "@/lib/api";
+import { api, type Bank, type BankPermissions, type OnboardingApplication } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -98,7 +98,7 @@ function PermissionsDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save}>Save</Button>
+          <Button onClick={save}>Save permissions</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -109,10 +109,18 @@ function RegisterBankDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = React.useState(false);
   const form = useForm<z.infer<typeof createBankSchema>>({
     resolver: zodResolver(createBankSchema),
-    defaultValues: { code: "", name: "", msp_id: "", owner_node: "", portal_url: "", staff_username: "", pool_size: "10" },
+    defaultValues: {
+      code: "",
+      name: "",
+      msp_id: "",
+      owner_node: "",
+      portal_url: "",
+      staff_username: "",
+      pool_size: "10",
+    },
   });
 
-  async function onSubmit(values: z.infer<typeof createBankSchema>) {
+  async function submit(values: z.infer<typeof createBankSchema>) {
     try {
       await api.createBank({
         code: values.code,
@@ -120,33 +128,34 @@ function RegisterBankDialog({ onCreated }: { onCreated: () => void }) {
         msp_id: values.msp_id,
         owner_node: values.owner_node,
         portal_url: values.portal_url,
-        staff_username: values.staff_username,
-        pool_size: parseInt(values.pool_size, 10),
+        staff_username: values.staff_username || undefined,
+        pool_size: Number(values.pool_size) || 10,
       });
-      toast.success(`Bank ${values.code} registered — run provisioning to mint its wallets`);
+      toast.success(`Registered ${values.name} (${values.code})`);
       setOpen(false);
       form.reset();
       onCreated();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Bank registration failed");
+      toast.error(e instanceof Error ? e.message : "registration failed");
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Register bank</Button>
+        <Button size="sm">
+          <Plus className="mr-1.5 h-4 w-4" /> Add bank
+        </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Register a commercial bank</DialogTitle>
+          <DialogTitle>Register commercial bank</DialogTitle>
           <DialogDescription>
-            Registers the bank in the CB registry. The bank deploys its own node, then you run
-            provisioning here to mint its token-CA identities.
+            Adds an org to the network registry. Keys are provisioned after creation.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField control={form.control} name="code" render={({ field }) => (
                 <FormItem>
@@ -210,18 +219,41 @@ function RegisterBankDialog({ onCreated }: { onCreated: () => void }) {
 
 export function CBBanks() {
   const [banks, setBanks] = React.useState<Bank[]>([]);
+  const [apps, setApps] = React.useState<OnboardingApplication[]>([]);
+  const [admittingCode, setAdmittingCode] = React.useState<string | null>(null);
   const [permBank, setPermBank] = React.useState<Bank | null>(null);
 
   async function load() {
     try {
-      setBanks(await api.banks());
+      const [banksData, appsData] = await Promise.all([
+        api.banks(),
+        api.onboardingApplications().catch(() => []),
+      ]);
+      setBanks(banksData);
+      setApps(appsData.filter((a) => a.status !== "approved"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "load failed");
     }
   }
+
   React.useEffect(() => {
     load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
   }, []);
+
+  async function handleAdmit(code: string) {
+    setAdmittingCode(code);
+    try {
+      await api.admitBankFast(code);
+      toast.success(`Bank ${code} admitted to network and channel successfully!`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Admission failed");
+    } finally {
+      setAdmittingCode(null);
+    }
+  }
 
   async function provision(code: string) {
     try {
@@ -246,7 +278,57 @@ export function CBBanks() {
   }
 
   return (
-    <Card className="shadow-sm">
+    <div className="space-y-6">
+      {apps.length > 0 && (
+        <Card className="border-primary/40 bg-primary/5 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+              Pending Bank Admissions ({apps.length})
+            </CardTitle>
+            <CardDescription>
+              Commercial banks requesting admission to the Sworna CBDC settlement channel.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Bank</TableHead>
+                  <TableHead>MSP ID</TableHead>
+                  <TableHead>Peer Endpoint</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {apps.map((app) => (
+                  <TableRow key={app.bank_code}>
+                    <TableCell>
+                      <p className="font-medium">{app.legal_name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{app.bank_code}</p>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{app.msp_id}</TableCell>
+                    <TableCell className="font-mono text-xs">{app.peer_endpoint}</TableCell>
+                    <TableCell className="text-xs">{fmtDate(app.created_at)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        disabled={admittingCode === app.bank_code}
+                        onClick={() => handleAdmit(app.bank_code)}
+                      >
+                        {admittingCode === app.bank_code ? "Admitting..." : "Approve & Admit to Network"}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle className="text-lg">Commercial banks on the network</CardTitle>
@@ -327,6 +409,7 @@ export function CBBanks() {
           onSaved={load}
         />
       )}
-    </Card>
+      </Card>
+    </div>
   );
 }

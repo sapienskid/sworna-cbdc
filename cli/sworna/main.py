@@ -30,6 +30,11 @@ def build_parser() -> argparse.ArgumentParser:
     bank_parser = subparsers.add_parser("bank", help="Commercial Bank operations")
     bank_sub = bank_parser.add_subparsers(dest="subcommand", help="Bank actions")
 
+    bank_join = bank_sub.add_parser("join", help="Automated 1-step Docker onboarding and service start")
+    bank_join.add_argument("--code", required=True, help="Bank code (e.g. 001)")
+    bank_join.add_argument("--cb-host", required=True, help="Central Bank host IP")
+    bank_join.add_argument("--my-host", default=None, help="This bank's host IP (auto-detected if omitted)")
+
     bank_init = bank_sub.add_parser("init", help="Initialize Bank MSP identity and peer")
     bank_init.add_argument("--code", required=True, help="Bank code (e.g. 001)")
     bank_init.add_argument("--cb-host", default="127.0.0.1", help="Central Bank host IP")
@@ -73,7 +78,9 @@ def main():
                 parser.parse_args(["cb", "--help"])
 
         elif args.command == "bank":
-            if args.subcommand == "init":
+            if args.subcommand == "join":
+                BankManager.join(code=args.code, cb_host=args.cb_host, my_host=args.my_host)
+            elif args.subcommand == "init":
                 BankManager.init(code=args.code, cb_host=args.cb_host)
             elif args.subcommand == "start":
                 BankManager.start(code=args.code, cb_host=args.cb_host)

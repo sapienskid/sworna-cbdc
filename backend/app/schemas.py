@@ -316,3 +316,9 @@ class MonetaryApprovalRequest(BaseModel):
 class SecurityApprovalRequest(BaseModel):
     approve: bool = True
     rejection_reason: str = ""
+
+
+class BankCredentialsRead(BaseModel):
+    bank_code: str
+    owner_node: str
+    bundle_base64: str

@@ -1,0 +1,33 @@
+services:
+  sworna-cb-backend:
+    container_name: sworna-cb-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100"]
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app/backend
+      - ./network:/app/network
+      - ./token-services:/app/token-services
+      - ./config:/app/config
+      - ./bin:/app/bin
+      - ./dist-bank-bundles:/app/dist-bank-bundles
+      - ./scripts:/app/scripts
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - SWORNA_DB_URL=sqlite:////app/backend/sworna.db
+      - SWORNA_ISSUER_URL=http://localhost:9100/api/v1
+      - SWORNA_AUDITOR_URL=http://localhost:9000/api/v1
+      - SWORNA_TOKEN_CA=http://localhost:27054
+      - SWORNA_AUTO_ADMIT=${SWORNA_AUTO_ADMIT:-0}
+      - PATH=/app/bin:/usr/local/bin:/usr/bin:/bin
+
+  sworna-cb-web:
+    container_name: sworna-cb-web
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    network_mode: host
+    restart: unless-stopped

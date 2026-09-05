@@ -69,26 +69,11 @@ if env | grep -q '^SWORNA_OWNER_.*_HOST='; then
 fi
 docker compose $COMPOSE_FILES up -d --build issuer auditor
 
-echo "==> [4/5] Banking backend + CB portal"
-cd "$ROOT/backend"
-[ -d .venv ] || python3 -m venv .venv
-./.venv/bin/pip install -q -r requirements.txt
-BACKEND_PORT="${SWORNA_BACKEND_PORT:-8000}"
-if ss -lnt 2>/dev/null | grep -q ":$BACKEND_PORT "; then
-  echo "   Port $BACKEND_PORT is in use, using 8100"
-  BACKEND_PORT=8100
-fi
-PORTAL_PORT="${SWORNA_PORTAL_PORT:-5173}"
-if ss -lnt 2>/dev/null | grep -q ":$PORTAL_PORT "; then
-  echo "   Port $PORTAL_PORT is in use, using 5273"
-  PORTAL_PORT=5273
-fi
-
-(setsid ./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" > /tmp/sworna-backend.log 2>&1 &)
-
-cd "$ROOT/web"
-npm install --silent
-(setsid npm run dev -- --port "$PORTAL_PORT" > /tmp/sworna-web.log 2>&1 &)
+echo "==> [4/5] Banking backend + CB portal (Dockerized)"
+BACKEND_PORT=8100
+PORTAL_PORT=5273
+cd "$ROOT"
+docker compose -f docker-compose.cb.yaml up -d --build
 
 if [ "$PROVISION" = "1" ]; then
   echo "==> [5/5] Provisioning wallet pools for registered banks"

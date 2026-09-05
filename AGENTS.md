@@ -9,7 +9,8 @@ runbook is [docs/SETUP.md](docs/SETUP.md); read it before doing anything.
 |---|---|---|---|
 | **Unified E2E Verification** | `./bin/sworna test e2e` | - | Automated end-to-end verification (mint, interbank ZKP transfer, balances) |
 | **Central bank** | `./bin/sworna cb init --provision` | `./scripts/deploy-centralbank.sh --provision` | Orderer + Central Bank Peer + CAs + Issuer/Auditor + Backend (:8100) + Portal (:5273) in Docker |
-| **Add a bank (one step)** | `./scripts/add-bank.sh 00k [<BANK-VM-IP>]` | - | **run on the CB host**; registers, provisions, syncs repo, onboards to channel, commits chaincode |
+| **Bank Join (Automated 1-Step)** | `./bin/sworna bank join --code 00k --cb-host <IP>` | `./scripts/bank-docker.sh up 00k <IP>` | **100% Dockerized**: Enrolls local keys, applies to CB API, streams credentials, joins channel & starts web portal (:5173) |
+| **Add a bank (SSH push)** | `./scripts/add-bank.sh 00k [<BANK-VM-IP>]` | - | Optional SSH push from CB host; registers, syncs repo, onboards, commits chaincode |
 | **Commercial Bank (VM)** | `./bin/sworna bank init --code 00k --cb-host <IP>` | `BANK_CODE=00k ./scripts/bank-network.sh identity` | Generates local MSP keys; exports `bank{k}-org.json` for CB approval |
 | **Bank Start (VM)** | `./bin/sworna bank start --code 00k --cb-host <IP>` | `BANK_CODE=00k ./scripts/bank-network.sh up\|join` | Joins settlement channel, starts FSC owner engine |
 | Commit chaincode only | `./scripts/commit-chaincode.sh` | - | CB host; normally already done by add-bank.sh |

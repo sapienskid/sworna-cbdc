@@ -120,6 +120,20 @@ export interface WatchlistEntry {
   created_at: string;
 }
 
+export interface OnboardingApplication {
+  id: number;
+  bank_code: string;
+  legal_name: string;
+  msp_id: string;
+  owner_node: string;
+  peer_endpoint: string;
+  ca_endpoint: string;
+  portal_url: string;
+  pool_size: number;
+  status: string;
+  created_at: string;
+}
+
 export interface CryptoParams {
   identifier: string;
   curve_id: number;
@@ -298,4 +312,8 @@ export const api = {
 
   cryptoParams: () => request<CryptoParams>("/admin/crypto/params"),
   cryptoWallets: () => request<WalletCryptoInfo[]>("/admin/crypto/wallets"),
+
+  onboardingApplications: () => request<OnboardingApplication[]>("/onboarding/applications"),
+  admitBankFast: (code: string) =>
+    request<OnboardingApplication>(`/onboarding/applications/${code}/admit-fast`, { method: "POST" }),
 };

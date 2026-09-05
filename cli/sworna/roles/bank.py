@@ -33,6 +33,14 @@ class BankManager:
             print(f"   FSC Owner Engine: http://localhost:{port}\n")
 
     @staticmethod
+    def join(code: str, cb_host: str, my_host: Optional[str] = None):
+        cmd = ["./scripts/bank-docker.sh", "up", code, cb_host]
+        if my_host:
+            cmd.append(my_host)
+        DockerRunner.run_cmd(cmd, cwd=str(REPO_ROOT))
+
+
+    @staticmethod
     def status(code: str):
         idx = int(code)
         peer_name = f"peer0.bank{idx}.sworna.example.com"
@@ -46,6 +54,6 @@ class BankManager:
     @staticmethod
     def down(code: str):
         print(f"==> Stopping Bank {code}...")
-        env = {"BANK_CODE": code}
-        DockerRunner.run_cmd(["./scripts/bank-network.sh", "down"], cwd=str(REPO_ROOT), env=env, check=False)
+        DockerRunner.run_cmd(["./scripts/bank-docker.sh", "down", code], cwd=str(REPO_ROOT), check=False)
         print(f" Bank {code} stopped.")
+

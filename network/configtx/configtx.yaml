@@ -135,8 +135,8 @@ Application: &ApplicationDefaults
       Type: ImplicitMeta
       Rule: "ANY Writers"
     Admins:
-      Type: ImplicitMeta
-      Rule: "MAJORITY Admins"
+      Type: Signature
+      Rule: "OR('CentralBankMSP.admin')"
     LifecycleEndorsement:
       Type: ImplicitMeta
       Rule: "MAJORITY Endorsement"
