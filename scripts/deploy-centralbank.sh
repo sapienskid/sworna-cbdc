@@ -29,6 +29,12 @@ for arg in "$@"; do
   esac
 done
 
+# Pre-create volume-mounted directories with user ownership
+mkdir -p "$ROOT/token-services/keys/ca" "$ROOT/token-services/data/auditor" "$ROOT/token-services/data/issuer" "$ROOT/dist-bank-bundles"
+if [ ! -w "$ROOT/token-services/keys" ]; then
+  docker run --rm -v "$ROOT/token-services:/ts" busybox chmod -R 777 /ts/keys 2>/dev/null || true
+fi
+
 cd "$ROOT/network"
 
 echo "==> [1/5] Fabric network (central-bank org only, channel settlement)"
@@ -39,6 +45,10 @@ echo "==> [2/5] Token chaincode installed + approved for the central-bank org"
 
 echo "==> [3/5] Token engine (issuer, auditor)"
 cd "$ROOT/token-services"
+mkdir -p keys/ca
+if [ ! -w keys ]; then
+  docker run --rm -v "$ROOT/token-services:/ts" busybox chmod -R 777 /ts/keys 2>/dev/null || true
+fi
 docker compose -f compose-ca.yaml up -d          # token CA (idemix issuer)
 
 # A fresh clone has no identities (keys/ is gitignored). Enroll the CB's own

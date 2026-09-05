@@ -11,6 +11,11 @@
 # Run from token-services/ with the token CA up.
 set -Exeuo pipefail
 
+mkdir -p "$(pwd)/keys"
+if [ ! -w "$(pwd)/keys" ]; then
+  docker run --rm -v "$(pwd):/ts" busybox chmod -R 777 /ts/keys 2>/dev/null || true
+fi
+
 # enroll the token-CA admin
 fabric-ca-client enroll -u http://admin:adminpw@localhost:27054
 
