@@ -91,7 +91,6 @@ def list_applications(
 @router.get("/applications/{code}", response_model=OnboardingApplicationRead)
 def get_application(
     code: str,
-    user: User = Depends(cb_admin),
     session: Session = Depends(get_session),
 ):
     app = session.scalar(select(OnboardingApplication).where(OnboardingApplication.bank_code == code))
