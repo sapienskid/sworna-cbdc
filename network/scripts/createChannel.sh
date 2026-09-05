@@ -64,6 +64,11 @@ createChannel() {
 		{ set +x; } 2>/dev/null
 		let rc=$res
 		COUNTER=$(expr $COUNTER + 1)
+		if grep -q "already exists" log.txt 2>/dev/null; then
+			infoln "Channel '$CHANNEL_NAME' already exists on orderer"
+			res=0
+			break
+		fi
 	done
 	cat log.txt
 	verifyResult $res "Channel creation failed"
@@ -85,6 +90,11 @@ joinChannel() {
     { set +x; } 2>/dev/null
 		let rc=$res
 		COUNTER=$(expr $COUNTER + 1)
+		if grep -q -E "already exists|ledger.*already exists" log.txt 2>/dev/null; then
+			infoln "peer0.org${ORG} has already joined channel '$CHANNEL_NAME'"
+			res=0
+			break
+		fi
 	done
 	cat log.txt
 	verifyResult $res "After $MAX_RETRY attempts, peer0.org${ORG} has failed to join channel '$CHANNEL_NAME' "

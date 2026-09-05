@@ -135,6 +135,7 @@ startDockerContainer() {
   # start the docker container
   if [ "$CCAAS_DOCKER_RUN" = "true" ]; then
     infoln "Starting the Chaincode-as-a-Service docker container..."
+    ${CONTAINER_CLI} rm -f peer0org1_${CC_NAME}_ccaas 2>/dev/null || true
     set -x
     ${CONTAINER_CLI} run --rm -d --name peer0org1_${CC_NAME}_ccaas  \
                   --network fabric_test \
