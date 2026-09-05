@@ -35,6 +35,12 @@ createAnchorPeerUpdate() {
     errorln "Org${ORG} unknown"
   fi
 
+  current_host=$(jq -r '.channel_group.groups.Application.groups.'${CORE_PEER_LOCALMSPID}'.values.AnchorPeers.value.anchor_peers[0].host // empty' ${TEST_NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}config.json 2>/dev/null || true)
+  if [ "$current_host" = "$HOST" ]; then
+    infoln "Anchor peer for org '$CORE_PEER_LOCALMSPID' is already set to $HOST:$PORT"
+    exit 0
+  fi
+
   set -x
   # Modify the configuration to append the anchor peer 
   jq '.channel_group.groups.Application.groups.'${CORE_PEER_LOCALMSPID}'.values += {"AnchorPeers":{"mod_policy": "Admins","value":{"anchor_peers": [{"host": "'$HOST'","port": '$PORT'}]},"version": "0"}}' ${TEST_NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}config.json > ${TEST_NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}modified_config.json
