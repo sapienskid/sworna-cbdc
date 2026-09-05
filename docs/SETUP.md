@@ -104,13 +104,29 @@ cd sworna-cbdc
 
 ---
 
-## 3. Network Topology
+## 3. Network Topology & Computer Lab / Workshop Setup
 
-| Node | Tailscale IP | Role |
+| Node | Default Host | Role |
 |------|-------------|------|
-| `centralcbdc` | `100.72.112.29` | Central Bank — orderer, peer, token engine, backend |
-| `bankpt` (Bank 001) | `100.111.120.73` | Commercial Bank A — peer, owner FSC, backend |
-| `bankpp` (Bank 002) | `100.71.149.60` | Commercial Bank B — peer, owner FSC, backend |
+| `centralcbdc` | `100.72.112.29` | Central Bank — orderer, peer, token engine, backend, portal |
+| `bank001` (Bank 001) | `100.x.y.z` or LAN | Commercial Bank A — peer, owner FSC, web portal |
+| `bank002` (Bank 002) | `100.x.y.z` or LAN | Commercial Bank B — peer, owner FSC, web portal |
+
+### Computer Lab & Workshop Networking (Zero Configuration)
+
+In university computer labs and multi-machine workshops, campus Wi-Fi and managed Ethernet switches often restrict device-to-device communication (AP client isolation and 802.1X MAC filtering). To guarantee 100% reliable connectivity:
+
+1. **VirtualBox NAT Mode (Recommended):**
+   - Keep VirtualBox VMs in default **NAT** mode. Do **not** use "Bridged Adapter" over Wi-Fi, as the 802.11 protocol rejects multiple MAC addresses on a single Wi-Fi association.
+2. **Tailscale Mesh with a Reusable Auth Key:**
+   - Students **do not need to create individual Tailscale accounts**.
+   - As the organizer, generate a single **Reusable Auth Key** from your [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys) (`tskey-auth-xxxx`).
+   - On each student VM, joining the network is literally one command:
+     ```bash
+     curl -fsSL https://tailscale.com/install.sh | sh
+     sudo tailscale up --authkey tskey-auth-xxxx
+     ```
+   - All VMs immediately join the encrypted mesh network and receive routable `100.x.y.z` IPs.
 
 ---
 
@@ -127,7 +143,7 @@ Run on the Central Bank VM:
 ./scripts/deploy-centralbank.sh --provision
 ```
 
-This provisions entirely within Docker:
+This provisions entirely within Docker (`network_mode: host`):
 - Fabric Orderer (`orderer.sworna.example.com:7050`)
 - Central Bank Peer (`peer0.centralbank.sworna.example.com:7051`)
 - Settlement Channel (`settlement`) with Token Chaincode sequence committed
@@ -137,31 +153,46 @@ This provisions entirely within Docker:
 - Central Bank Banking Backend (`sworna-cb-backend` container on `:8100`)
 - Central Bank Web Portal (`sworna-cb-web` container on `:5273`)
 
+Verify Central Bank services:
+```bash
+./bin/sworna cb status
+```
+
 ---
 
-## 5. Onboarding Commercial Banks (Multi-Org Flow)
+## 5. Onboarding Commercial Banks (100% Dockerized)
 
-### 5.0 Fast path via CLI (Multi-VM Distributed Model)
+### 5.0 The 1-Step Automated Join Flow (Recommended)
 
-Each commercial bank runs on its own VM, generating and retaining its own private signing and TLS keys.
+Commercial banks self-provision their Fabric org on their own VM and join the network via HTTP API and web portal admission.
 
-**Step 1: On the Commercial Bank VM (e.g. Bank 001 on `10.0.0.21`):**
+**Step 1: On the Commercial Bank VM (e.g. Bank 001):**
 ```bash
-./bin/sworna bank init --code 001 --cb-host <CB_IP>
+./bin/sworna bank join --code 001 --cb-host <CB_HOST_IP>
 ```
-This generates the bank's local MSP, TLS credentials, and exports the public definition `network/bank1-org.json`.
+*(Script fallback: `./scripts/bank-docker.sh up 001 <CB_HOST_IP>`)*
 
-**Step 2: On the Central Bank VM (e.g. `10.0.0.10`):**
-- Review the bank's onboarding submission via the Central Bank Web Portal (`http://<CB_IP>:5273/onboarding`).
-- Approve the bank (4-Eyes dual control) to commit the channel configuration delta admitting `Bank1MSP`.
+What happens automatically:
+1. Enrolls local Bank CA and Peer TLS credentials (private keys stay on the bank VM).
+2. Submits an onboarding application with public MSP definitions to the Central Bank API (`POST /api/v1/onboarding/apply`).
+3. Polls the CB API waiting for administrative approval.
 
-**Step 3: On the Commercial Bank VM:**
-```bash
-./bin/sworna bank start --code 001 --cb-host <CB_IP>
-```
-The bank peer joins `settlement`, approves chaincode, and starts the containerized FSC Owner Engine (`token-services-owner1` on `:9200`).
+**Step 2: On the Central Bank Web Portal (`http://<CB_HOST_IP>:5273`):**
+- Log in as `cbadmin` / `sworna-cb`.
+- Navigate to **Bank Management**.
+- Under **Pending Bank Admissions**, the incoming application from Bank 001 is displayed.
+- Click **Approve & Admit to Network** (or enable auto-admission with `SWORNA_AUTO_ADMIT=1`).
 
-### 5.1 Fast path via SSH Script (Automated from CB host)
+**Step 3: Automated Completion:**
+- The bank VM receives its admission status and streams its Idemix wallet credentials and Orderer TLS certificates via `GET /api/v1/onboarding/applications/{code}/credentials`.
+- The bank joins the `settlement` channel, starts its local peer, runs the containerized FSC owner engine, and launches the commercial bank web portal at:
+  ```
+  http://<BANK_HOST_IP>:5173
+  ```
+
+---
+
+### 5.1 Push Flow via SSH Script (Optional)
 
 From the **central-bank host**, after `sworna cb init`:
 
@@ -281,9 +312,13 @@ WantedBy=multi-user.target
 
 | Issue | Cause | Fix Applied |
 |-------|-------|-------------|
+| VirtualBox Bridged mode gets no IP on lab Wi-Fi | 802.11 Wi-Fi standard rejects multiple MAC addresses on single link; university AP isolation blocks DHCP | Revert VirtualBox to default **NAT** mode; connect machines via **Tailscale** using a Reusable Auth Key |
+| Multi-VM Tailscale without individual accounts | Students don't have or want individual Tailscale accounts | Generate a single **Reusable Auth Key** from Tailscale Admin Console; join via `sudo tailscale up --authkey <KEY>` |
+| Connecting single VM to multiple Tailscale accounts | Tailscale connects to 1 account at a time | Use Tailscale **Node Sharing** (Admin console $\rightarrow$ Share Machine link) or a shared Reusable Auth Key |
+| `permission denied` on `token-services/keys/issuer` | Docker daemon auto-created root-owned directory during CA volume mount | Pre-created volume directories in `deploy-centralbank.sh` with non-root ownership and `chmod 777` fallback |
+| Channel or anchor peer update failure on re-run (`already exists`) | Ledger state preserved across runs | Made `createChannel.sh`, `setAnchorPeer.sh`, and `deployCCAAS.sh` idempotent to tolerate existing channel and anchor states |
 | ZKP Public Parameters mismatch (`invalid proof`) | Re-generated Idemix CA produced fresh issuer key hash differing from checked-in `zkatdlog_pp.json` | Compiled native `tokengen` from Fabric Token-SDK v0.3.0, generated fresh public parameters, committed chaincode sequence on-chain |
 | Chaincode upgrade error: `already initialized but called as init` | Fabric v2/v3 rejects `--isInit` on already initialized chaincode definitions | Upgraded chaincode definition, then invoked regular `init` transaction without `--isInit` flag |
-| Multi-org channel update rejection | Fabric requires majority signatures (`2-of-2`, `3-of-4`) | Added multi-org co-signing relay flow to `onboard-bank.sh` |
 | `failed getting recipient identity: all dials failed` | FSC announced local loopback IP instead of routable container network | Configured container DNS overrides and bridge network routing in `scripts/gen-net-overrides.py` |
 | `sufficient but partially locked funds` | In-flight transaction temporarily locked UTXO inputs | Waited for ledger commit (~8-10s) for token collector to release change outputs; increased client timeout to 120s |
 
@@ -306,3 +341,4 @@ WantedBy=multi-user.target
 | Owner 5 FSC HTTP / P2P | 9600 / 9601 | HTTP / libp2p | Bank 005 |
 | Central Bank Backend API | 8100 | HTTP | Central Bank (`sworna-cb-backend`) |
 | Central Bank Web Portal | 5273 | HTTP | Central Bank (`sworna-cb-web`) |
+| Commercial Bank Web Portal | 5173 | HTTP | Commercial Bank (`sworna-bank-web-00k`) |

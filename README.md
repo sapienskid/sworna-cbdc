@@ -26,24 +26,23 @@ A two-tier Central Bank Digital Currency (CBDC) platform built on Hyperledger Fa
 
 ### Web Portals & APIs
 
-- **Central Bank Portal:** `http://localhost:5273` (or `<CB_IP>:5273`) — `cbadmin` / `sworna-cb`
+- **Central Bank Portal:** `http://localhost:5273` (or `http://<CB_IP>:5273`) — `cbadmin` / `sworna-cb`
 - **Central Bank API:** `http://localhost:8100/docs` (Swagger UI)
-- **Commercial Bank Portals:** `http://localhost:5273/b/001` through `/b/005`
+- **Commercial Bank Portals:** `http://localhost:5173` on each bank VM (or `http://<CB_IP>:5273/b/001` through `/b/005` in sandbox mode)
 
 ### Deploy & Verify with `sworna-cli`
 
 ```bash
-# 1. Central Bank VM (Orderer, CB Peer, CCaaS, Issuer, Auditor, Backend, Portal)
+# 1. Central Bank VM (Orderer, CB Peer, CCaaS, Issuer, Auditor, Backend :8100, Portal :5273)
 ./bin/sworna cb init --provision
 
 # 2. Verify all Central Bank services
 ./bin/sworna cb status
 
-# 3. Add a commercial bank (VM mode):
+# 3. Add a commercial bank (100% Dockerized 1-Step Onboarding):
 # On Bank VM:
-./bin/sworna bank init --code 001 --cb-host <CB_IP>
-# Central Bank approves onboarding via Web Portal (http://<CB_IP>:5273/onboarding)
-./bin/sworna bank start --code 001 --cb-host <CB_IP>
+./bin/sworna bank join --code 001 --cb-host <CB_IP>
+# Central Bank approves onboarding with 1 click via Web Portal (http://<CB_IP>:5273)
 
 # 4. Run automated End-to-End verification (Wholesale Mint + ZKP Transfer + Balance Check)
 ./bin/sworna test e2e
@@ -62,28 +61,24 @@ Central Bank (CB VM)
   └── Central Bank Portal      :5273 (Docker container)
 
 Commercial Bank VMs (Banks 001..005)
-  ├── Fabric Peer (Bank k)     :7051 (internal) / :9051+2000*(k-1)
-  ├── Owner FSC (owner k)      :9200+100*(k-1) / :9201+100*(k-1) (P2P)
-  └── Bank Fabric CA           :7054 (internal) / :20055+k
+  ├── Fabric Peer (Bank k)     :9051 + 2000*(k-1)
+  ├── Owner FSC (owner k)      :9200 + 100*(k-1) / :9201 + 100*(k-1) (P2P)
+  ├── Bank Fabric CA           :20054 + k
+  └── Bank Web Portal          :5173 (Docker container)
 ```
 
-Bank B VM
-  ├── Fabric Peer (Bank2)      :11051
-  ├── Owner FSC (owner2)       :9300 / :9301 (P2P)
-  ├── Bank Fabric CA           :9054
-  ├── Backend API              :8000
-  └── Bank Portal              :5173
-```
+## Network & Lab/Workshop Setup
 
-## Network
+In computer labs and multi-VM workshops, VMs communicate seamlessly over **Tailscale** (mesh VPN):
 
-All VMs communicate over **Tailscale** (encrypted mesh VPN):
-
-| VM | Tailscale IP | Role |
-|----|-------------|------|
-| centralcbdc | `100.72.112.29` | Central Bank |
-| bankpt | `100.111.120.73` | Bank A (001) |
-| bankpp | `100.71.149.60` | Bank B (002) |
+- **Zero configuration on student VMs:** Students do not need individual Tailscale accounts. Generate a single **Reusable Auth Key** from your [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys) (`tskey-auth-xxxx`).
+- **1-Command Connection:**
+  ```bash
+  curl -fsSL https://tailscale.com/install.sh | sh
+  sudo tailscale up --authkey <REUSABLE_AUTH_KEY>
+  ```
+- **VirtualBox Networking:** Keep VirtualBox in default **NAT** mode. Enterprise lab Wi-Fi and Ethernet switches frequently block "Bridged Networking" (due to 802.11 MAC restrictions and 802.1X port security). NAT + Tailscale bypasses all firewalls and AP isolation.
+- **Dynamic Routing:** `bank join` automatically queries the kernel routing table for `CB_HOST` to select the correct interface IP (`100.x.y.z` or LAN) without manual IP overrides.
 
 ## Tech Stack
 

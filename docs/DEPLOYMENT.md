@@ -97,11 +97,10 @@ All deployments are driven via the unified `sworna` CLI (`./bin/sworna` or `pip 
 # 3. Mint wholesale CBDC to a bank (e.g. 10,000 SWR to Bank 001)
 ./bin/sworna cb mint --bank 001 --amount 10000.0
 
-# 4. Multi-VM Bank Onboarding:
+# 4. Multi-VM Bank Onboarding (100% Dockerized 1-Step):
 # On the Bank VM:
-./bin/sworna bank init --code 001 --cb-host <CB_IP>
-# (Submit network/bank1-org.json for CB approval via Portal http://<CB_IP>:5273/onboarding)
-./bin/sworna bank start --code 001 --cb-host <CB_IP>
+./bin/sworna bank join --code 001 --cb-host <CB_IP>
+# Central Bank approves in 1 click via Portal (http://<CB_IP>:5273 -> Bank Management)
 
 # 5. Automated End-to-End Verification (Mint, Interbank ZKP Transfer, Ledger Verification)
 ./bin/sworna test e2e
