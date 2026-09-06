@@ -16,8 +16,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .models import Bank
-from .paths import BIN, TOKEN_SERVICES
+from sqlalchemy import select
+from sqlalchemy.orm import object_session
+
+from .models import Bank, OnboardingApplication
+from .paths import BIN, REPO_ROOT, TOKEN_SERVICES
 
 TOKEN_CA_URL = os.getenv("SWORNA_TOKEN_CA", "http://localhost:27054")
 TOKEN_CA_ADMIN = os.getenv("SWORNA_TOKEN_CA_ADMIN", "admin:adminpw")
@@ -145,9 +148,64 @@ def provision_wallet_pool(bank: Bank) -> None:
     bank.pool_size = len(declared)
 
 
-def assign_wallet(bank: Bank) -> str:
-    """Take the next free wallet from the pool (raises if exhausted)."""
+def replenish_wallet_pool(bank: Bank, batch_size: int = 25) -> int:
+    """Mint additional idemix wallets to expand the bank's pool.
+
+    New ids continue the deterministic `pool_{code}_wN` sequence; wallets that
+    already exist at the token CA are reused. The bank's join bundle is
+    deleted so the next credentials fetch re-exports a tarball containing the
+    new wallets, and the onboarding application's pool_size snapshot is kept
+    in sync so the bank renders its owner conf with the expanded pool.
+    """
+    new_wallets = [
+        f"pool_{bank.code}_w{i}"
+        for i in range(bank.pool_size + 1, bank.pool_size + batch_size + 1)
+    ]
+    ensure_owner_identity(bank)
+    for wid in new_wallets:
+        msp = wallet_msp_path(bank.owner_node, wid)
+        if not (msp / "user" / "SignerConfig").exists():
+            generate_wallet(bank.owner_node, wid)
+
+    bank.wallet_pool = {
+        "used": list(bank.wallet_pool.get("used", [])),
+        "free": list(bank.wallet_pool.get("free", [])) + new_wallets,
+    }
+    bank.pool_size = len(bank.wallet_pool["used"]) + len(bank.wallet_pool["free"])
+
+    bundle = REPO_ROOT / "dist-bank-bundles" / f"bank{bank.code}.tar.gz"
+    bundle.unlink(missing_ok=True)
+
+    session = object_session(bank)
+    app = session.scalar(
+        select(OnboardingApplication).where(OnboardingApplication.bank_code == bank.code)
+    )
+    if app is not None:
+        app.pool_size = bank.pool_size
+    return len(new_wallets)
+
+
+def assign_wallet(
+    bank: Bank, auto_replenish_threshold: int = 5, batch_size: int = 25
+) -> str:
+    """Take the next free wallet from the pool, minting more when low.
+
+    Auto-replenishes whenever the free count drops to the threshold, so
+    customer onboarding never fails with "no free wallets". If replenishment
+    fails (e.g. token CA unreachable) but free wallets remain, the assignment
+    still succeeds.
+    """
     free = list(bank.wallet_pool.get("free", []))
+    if len(free) <= auto_replenish_threshold:
+        try:
+            replenish_wallet_pool(bank, batch_size=batch_size)
+            free = list(bank.wallet_pool.get("free", []))
+        except Exception as exc:
+            if not free:
+                raise ProvisioningError(
+                    f"wallet pool exhausted and replenishment failed: {exc}"
+                ) from exc
+
     if not free:
         raise ProvisioningError(
             f"bank {bank.name} has no free wallets; provision more"

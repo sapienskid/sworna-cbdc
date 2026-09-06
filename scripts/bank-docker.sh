@@ -51,17 +51,22 @@ down() {
 
 # Auto-detect this VM's IP if not provided
 if [ -z "$MY_HOST" ]; then
-  # 1. First try the route to CB_HOST (matches LAN, Wi-Fi, Ethernet, or Tailscale)
-  MY_HOST=$(ip route get "$CB_HOST" 2>/dev/null | grep -oP 'src \K\S+' || true)
-
-  # 2. Try default route IP
-  if [ -z "$MY_HOST" ]; then
-    MY_HOST=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' || true)
+  # 1. Prefer the Tailscale MagicDNS name or active Tailscale IPv4 — stable
+  #    across re-auths and network changes, unlike DHCP/LAN addresses.
+  if command -v tailscale >/dev/null 2>&1 && tailscale status --json >/dev/null 2>&1; then
+    TS_NAME=$(tailscale status --json 2>/dev/null | jq -r '.Self.DNSName // empty' | sed 's/\.$//')
+    TS_IP=$(tailscale ip -4 2>/dev/null | head -1 || true)
+    MY_HOST="${TS_NAME:-$TS_IP}"
   fi
 
-  # 3. Fallback to Tailscale if present
-  if [ -z "$MY_HOST" ] && command -v tailscale >/dev/null 2>&1 && tailscale ip -4 >/dev/null 2>&1; then
-    MY_HOST=$(tailscale ip -4 | head -1)
+  # 2. Route fallback: the source IP of the route toward the Central Bank
+  if [ -z "$MY_HOST" ]; then
+    MY_HOST=$(ip route get "$CB_HOST" 2>/dev/null | grep -oP 'src \K\S+' || true)
+  fi
+
+  # 3. Default route IP
+  if [ -z "$MY_HOST" ]; then
+    MY_HOST=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' || true)
   fi
 
   # 4. Fallback to hostname -I
@@ -164,6 +169,11 @@ echo "==> [5/5] Joining channel 'settlement' and launching containers..."
 (cd "$ROOT" && BANK_CODE="$BANK_CODE" SWORNA_CB_HOST="$CB_HOST" ./scripts/bank-network.sh join)
 
 echo "==> Starting FSC Owner engine..."
+# Pick up the bank's live wallet pool size — the CB auto-replenishes the pool
+# when it runs low, and the owner conf must declare every pool wallet.
+LIVE_POOL=$(curl -sf "${CB_API}/onboarding/applications/${BANK_CODE}" 2>/dev/null | jq -r '.pool_size // empty' || true)
+export POOL_SIZE="${LIVE_POOL:-10}"
+echo "    Wallet pool size (from CB): ${POOL_SIZE}"
 export SWORNA_OWNERS="${SWORNA_OWNERS:-owner1 owner2 owner3 owner4 owner5}"
 export SWORNA_CB_HOST="$CB_HOST"
 "$ROOT/scripts/bank-network.sh" conf
