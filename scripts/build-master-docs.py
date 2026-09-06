@@ -192,13 +192,17 @@ def flatten_md_links(text: str) -> str:
 
 def build_unified_markdown() -> None:
     """Read all source files and assemble docs/SWORNA-CBDC-MASTER-SPECIFICATION.md."""
+    if not SYNTHESIS_SRC.exists():
+        if MASTER_MD.exists():
+            print(f"==> Using existing master specification: {MASTER_MD}")
+            return
+        raise FileNotFoundError(f"Missing master specification markdown: {MASTER_MD}")
+
     print("==> Assembling unified master specification markdown...")
     parts = [FRONTMATTER.strip(), "", "\\newpage", ""]
 
     # PART I: Executive Synthesis & Master Plan
     print("  -> Processing Part I: Executive Synthesis & Master Plan")
-    if not SYNTHESIS_SRC.exists():
-        raise FileNotFoundError(f"Missing Part I synthesis source: {SYNTHESIS_SRC}")
     
     synthesis_body = SYNTHESIS_SRC.read_text(encoding="utf-8").strip()
     synthesis_body = sanitize_text(synthesis_body)
@@ -316,9 +320,8 @@ def compile_epub() -> None:
         str(MASTER_MD),
         "-o",
         str(MASTER_EPUB),
-        "--top-level-division=part",
         "--toc",
-        "--toc-depth=3",
+        "--number-sections",
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
@@ -331,7 +334,7 @@ def compile_epub() -> None:
 
 def compile_pdf() -> None:
     """Compile docs/SWORNA-CBDC-MASTER-SPECIFICATION.md into PDF via XeLaTeX."""
-    print("==> Compiling PDF publication via XeLaTeX (this may take ~1-2 minutes)...")
+    print("==> Compiling PDF publication via XeLaTeX...")
     start_t = time.time()
     cmd = [
         "pandoc",
@@ -339,9 +342,12 @@ def compile_pdf() -> None:
         "-o",
         str(MASTER_PDF),
         "--pdf-engine=xelatex",
-        "--top-level-division=part",
         "--toc",
-        "--toc-depth=3",
+        "--number-sections",
+        "-V", "geometry:margin=1in",
+        "-V", "linkcolor=blue",
+        "-V", "urlcolor=blue",
+        "-V", "toccolor=black",
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:

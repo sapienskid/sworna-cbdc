@@ -1,5 +1,16 @@
-#!/usr/bin/env bash
-set -e
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export PYTHONPATH="$ROOT/cli:$PYTHONPATH"
-exec python3 -m sworna.main "$@"
+#!/usr/bin/env python3
+"""Sworna CBDC Unified CLI."""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CLI_DIR = ROOT / "cli"
+
+if str(CLI_DIR) not in sys.path:
+    sys.path.insert(0, str(CLI_DIR))
+
+from sworna.main import main
+
+if __name__ == "__main__":
+    main()
+
