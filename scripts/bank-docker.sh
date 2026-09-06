@@ -174,6 +174,22 @@ echo "==> Starting FSC Owner engine..."
 LIVE_POOL=$(curl -sf "${CB_API}/onboarding/applications/${BANK_CODE}" 2>/dev/null | jq -r '.pool_size // empty' || true)
 export POOL_SIZE="${LIVE_POOL:-10}"
 echo "    Wallet pool size (from CB): ${POOL_SIZE}"
+
+# Cross-VM name resolution: gen-net-overrides.py maps owner{k}/peer0.bank{k}
+# hostnames to per-owner IPs (SWORNA_OWNER_<NAME>_HOST). Map this bank's own
+# node to this VM, and every other approved bank to its registered peer
+# endpoint; anything left unset would wrongly fall back to the CB IP.
+export "SWORNA_OWNER_${OWNER_NODE^^}_HOST=${MY_HOST}"
+BANKS_JSON=$(curl -sf "${CB_API}/onboarding/applications" 2>/dev/null || echo "[]")
+for row in $(echo "$BANKS_JSON" | jq -r '.[] | select(.status == "approved") | @base64' 2>/dev/null); do
+  _bcode=$(echo "$row" | base64 -d | jq -r .bank_code)
+  [ "$_bcode" = "$BANK_CODE" ] && continue
+  _bpeer=$(echo "$row" | base64 -d | jq -r .peer_endpoint)
+  _bhost=${_bpeer%%:*}
+  if [ -n "$_bhost" ]; then
+    export "SWORNA_OWNER_OWNER$((10#$_bcode))_HOST=${_bhost}"
+  fi
+done
 export SWORNA_OWNERS="${SWORNA_OWNERS:-owner1 owner2 owner3 owner4 owner5}"
 export SWORNA_CB_HOST="$CB_HOST"
 "$ROOT/scripts/bank-network.sh" conf
