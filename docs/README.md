@@ -2,6 +2,14 @@
 
 Start here for anything you want to understand or operate.
 
+## Master Specification (Publication-Ready)
+
+| Document | Format | Description |
+|---|---|---|
+| [SWORNA-CBDC-MASTER-SPECIFICATION.md](SWORNA-CBDC-MASTER-SPECIFICATION.md) | Markdown | Definitive 4,900+ line technical and architectural specification |
+| [sworna-cbdc-specification.pdf](sworna-cbdc-specification.pdf) | PDF (XeLaTeX) | Stakeholder presentation document with complete math and code flows |
+| [sworna-cbdc-specification.epub](sworna-cbdc-specification.epub) | EPUB | E-Reader formatted complete technical manual |
+
 ## Getting started
 
 | Doc | What it covers |

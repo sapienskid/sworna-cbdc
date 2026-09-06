@@ -10,43 +10,50 @@ A two-tier Central Bank Digital Currency (CBDC) platform built on Hyperledger Fa
 - All transfers are **zero-knowledge** (Idemix/ZKP) — amounts and identities are private
 - Settled on a private blockchain (`settlement` channel)
 
-## Quick Start
+## Master Specification (Publication-Ready)
 
-- **[docs/DEMO_AND_UI_GUIDE.md](docs/DEMO_AND_UI_GUIDE.md)**: Browser portal URLs, login credentials, UI field definitions, and step-by-step presentation script.
-- **[docs/SETUP.md](docs/SETUP.md)**: Authoritative operational setup runbook, multi-org onboarding, and troubleshooting.
-- **[docs/README.md](docs/README.md)**: full documentation index, including the deep dives below.
+| Document | Format | Description |
+|:---|:---|:---|
+| **[Master Specification Markdown](docs/SWORNA-CBDC-MASTER-SPECIFICATION.md)** | Markdown | 4,900+ lines covering macroeconomic model, UTXO mechanics, Idemix/Pedersen cryptography, Go FSC flows, FastAPI backend, and workshop runbooks |
+| **[Master Specification PDF](docs/sworna-cbdc-specification.pdf)** | PDF (XeLaTeX) | Stakeholder and executive presentation document with complete math, diagrams, and verification benchmarks |
+| **[Master Specification EPUB](docs/sworna-cbdc-specification.epub)** | EPUB | Full technical manual optimized for mobile and e-readers |
 
-### Deep Dives
-
-- **[docs/BLIND-SIGNATURES-AND-PRIVACY.md](docs/BLIND-SIGNATURES-AND-PRIVACY.md)** — how the blind-signature / zero-knowledge privacy layer works, step by step.
-- **[docs/AML-COMPLIANCE.md](docs/AML-COMPLIANCE.md)** — the AML rule engine: KYC tiers, limits, watchlist screening, alerts.
-- **[docs/BACKEND-INTERNALS.md](docs/BACKEND-INTERNALS.md)** — module-by-module walk-through of the FastAPI banking layer.
-- **[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md)** — trust model, cryptography, auth, and known limitations.
-- **[docs/FRONTEND.md](docs/FRONTEND.md)** — the three-portal React app: architecture and conventions.
+## Quick Start & Web Portals
 
 ### Web Portals & APIs
+- **Central Bank Portal:** `http://<CB_IP>:5273` (Local: `http://localhost:5273`) — Login: `cbadmin` / `sworna-cb`
+- **Central Bank Swagger API:** `http://<CB_IP>:8100/docs`
+- **Commercial Bank Portals:** `http://<BANK_VM_IP>:5173/b/00k` (Local: `http://localhost:5173`) — Login: `bank{k}_admin` / `sworna-bank`
+- **Retail Customer View:** `http://<BANK_VM_IP>:5173/b/00k/customer` — Login: `customer00k_1` / `customer123`
 
-- **Central Bank Portal:** `http://localhost:5273` (or `http://<CB_IP>:5273`) — `cbadmin` / `sworna-cb`
-- **Central Bank API:** `http://localhost:8100/docs` (Swagger UI)
-- **Commercial Bank Portals:** `http://localhost:5173` on each bank VM (or `http://<CB_IP>:5273/b/001` through `/b/005` in sandbox mode)
-
-### Deploy & Verify with `sworna-cli`
+### Deploy & Verify with Single Command
 
 ```bash
-# 1. Central Bank VM (Orderer, CB Peer, CCaaS, Issuer, Auditor, Backend :8100, Portal :5273)
+# ================================================================
+# 1. Central Bank Host (Orderer, CB Peer, CCaaS, Issuer, Auditor, Backend :8100, Portal :5273)
+# ================================================================
 ./bin/sworna cb init --provision
 
-# 2. Verify all Central Bank services
-./bin/sworna cb status
-
-# 3. Add a commercial bank (100% Dockerized 1-Step Onboarding):
-# On Bank VM:
+# ================================================================
+# 2. Commercial Bank Host (Any new VM — 100% Dockerized 1-Step Onboarding):
+# ================================================================
 ./bin/sworna bank join --code 001 --cb-host <CB_IP>
-# Central Bank approves onboarding with 1 click via Web Portal (http://<CB_IP>:5273)
+# (Or directly: ./scripts/bank-docker.sh up 001 <CB_IP>)
 
-# 4. Run automated End-to-End verification (Wholesale Mint + ZKP Transfer + Balance Check)
+# ================================================================
+# 3. Automated End-to-End Verification (Mint + ZKP Transfer + Balance Audit)
+# ================================================================
 ./bin/sworna test e2e
 ```
+
+### Documentation Index
+- **[docs/DEMO_AND_UI_GUIDE.md](docs/DEMO_AND_UI_GUIDE.md)**: Browser portal URLs, credentials, UI field definitions, and presentation script.
+- **[docs/SETUP.md](docs/SETUP.md)**: Authoritative operational setup runbook, multi-org onboarding, and troubleshooting.
+- **[docs/BLIND-SIGNATURES-AND-PRIVACY.md](docs/BLIND-SIGNATURES-AND-PRIVACY.md)**: Blind signatures (Idemix/CL), Pedersen commitments, range proofs, the auditor gate.
+- **[docs/AML-COMPLIANCE.md](docs/AML-COMPLIANCE.md)**: AML rule engine: KYC tiers, limits, velocity, structuring, watchlist, alerts.
+- **[docs/BACKEND-INTERNALS.md](docs/BACKEND-INTERNALS.md)**: Module-by-module walk-through of the FastAPI banking layer.
+- **[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md)**: Trust model, cryptography, auth, and known limitations.
+- **[docs/README.md](docs/README.md)**: Full documentation index.
 
 ## Architecture
 
@@ -102,20 +109,41 @@ In computer labs and multi-VM workshops, VMs communicate seamlessly over **Tails
 - **1-Command Dockerized Onboarding** — `./bin/sworna bank join --code 00k --cb-host <CB_IP>` eliminates host runtime dependencies
 - **Scripts are idempotent** — re-running deploy or join steps is always safe
 
+## Development & Multi-VM Update Workflow
+
+When making enhancements or updating code across multiple machines:
+1. **Develop and test locally**:
+   ```bash
+   cd web && npm run build
+   ```
+2. **Commit and push to GitHub**:
+   ```bash
+   git add .
+   git commit -m "feat/fix: description of changes"
+   git push origin main
+   ```
+3. **Update any running VM with a single pull & restart**:
+   ```bash
+   ssh user@<VM_IP>
+   cd ~/sworna-cbdc
+   git pull origin main
+   docker build -t sworna-web:latest ./web
+   # Restart container:
+   docker restart sworna-cb-web          # on Central Bank VM
+   # Or on Bank VM:
+   docker restart sworna-bank-web-00k    # e.g. sworna-bank-web-001
+   ```
+
 ## Verification
 
 After full deployment, run the checks in [docs/SETUP.md §7](docs/SETUP.md#7-verification-checklist).
 
 Success criteria:
 - All containers healthy
-- Chaincode committed with all 3 org approvals (`Bank1MSP: true, Bank2MSP: true, CentralBankMSP: true`)
-- Mint → Deposit → P2P transfer succeeds end-to-end
+- Chaincode committed with all org approvals
+- Mint → Deposit → P2P transfer succeeds end-to-end (`./bin/sworna test e2e`)
 
 ## Troubleshooting
 
 See [docs/SETUP.md §9](docs/SETUP.md#9-troubleshooting) for a full table of failure modes and fixes.
 
-Most common issues:
-- **`reading from file .../owner1/fsc/.../cert.pem failed`** — copy sibling bank's public cert to the bank VM
-- **`policy not satisfied: 1 sub-policy satisfied, requires 2`** — onboard-bank.sh must collect co-sigs from existing banks
-- **`chaincode registration failed`** — CCAAS container package ID must exactly match `peer lifecycle chaincode queryinstalled` output

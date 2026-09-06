@@ -21,15 +21,16 @@
 
 ## 1. Access Links & Credentials
 
-All web portals are accessible directly via your web browser on **Port 8000** (or Port 5173).
+All web portals are accessible directly via web browser:
 
 ### Direct Browser Portals
 
 | Node | Browser URL | Default Role / View |
 |---|---|---|
-| **Central Bank** | **`http://100.72.112.29:8000`** *(or `:5173`)* | Central Bank Operator Console & Block Explorer |
-| **Commercial Bank A (Bank 001)** | **`http://100.111.120.73:8000`** | Bank A Staff Console & Retail Customer Portal |
-| **Commercial Bank B (Bank 002)** | **`http://100.71.149.60:8000`** | Bank B Staff Console & Retail Customer Portal |
+| **Central Bank Portal** | **`http://100.72.112.29:5273`** *(or `:5273` on localhost)* | Central Bank Operator Console & Block Explorer |
+| **Central Bank API** | **`http://100.72.112.29:8100/docs`** | Swagger Interactive REST API Reference |
+| **Commercial Bank 1 (Bank 001)** | **`http://100.71.149.60:5173`** | Bank 1 Staff Console & Retail Customer Portal |
+| **Commercial Bank 2 (Bank 002)** | **`http://100.111.120.73:5173`** | Bank 2 Staff Console & Retail Customer Portal |
 
 ---
 

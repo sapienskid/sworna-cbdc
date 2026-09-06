@@ -54,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
     test_sub = test_parser.add_subparsers(dest="subcommand", help="Test actions")
     test_sub.add_parser("e2e", help="Run end-to-end integration and ZKP transfer test")
 
+    # Docs commands
+    docs_parser = subparsers.add_parser("docs", help="Documentation compilation & publication")
+    docs_sub = docs_parser.add_subparsers(dest="subcommand", help="Docs actions")
+    docs_sub.add_parser("build", help="Build unified master specification, EPUB, and PDF")
+    docs_sub.add_parser("check", help="Check that all documentation sources exist and are valid")
+
     return parser
 
 def main():
@@ -96,6 +102,15 @@ def main():
                 E2ETester.run_tests()
             else:
                 parser.parse_args(["test", "--help"])
+
+        elif args.command == "docs":
+            from .docs_builder import DocsManager
+            if args.subcommand == "build":
+                DocsManager.build()
+            elif args.subcommand == "check":
+                DocsManager.check()
+            else:
+                parser.parse_args(["docs", "--help"])
     except KeyboardInterrupt:
         print("\nAborted.")
         sys.exit(130)
