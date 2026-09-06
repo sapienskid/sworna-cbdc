@@ -7,7 +7,7 @@ RUN go mod download
 RUN find /go/pkg/mod/github.com/hyperledger-labs/fabric-smart-client@* -name envelope.go -exec chmod +w {} \; && \
     find /go/pkg/mod/github.com/hyperledger-labs/fabric-smart-client@* -name envelope.go -exec sed -i 's/string(cis.ChaincodeSpec.Input.Args\[0\])/func() string { if len(cis.ChaincodeSpec.Input.Args) > 0 { return string(cis.ChaincodeSpec.Input.Args[0]) }; return "" }()/' {} \; && \
     find /go/pkg/mod/github.com/hyperledger-labs/fabric-smart-client@* -path "*services/comm/p2p.go" -exec chmod +w {} \; && \
-    find /go/pkg/mod/github.com/hyperledger-labs/fabric-smart-client@* -path "*services/comm/p2p.go" -exec sed -i '192s/.*/\tif len(address) != 0 {/' {} \;
+    find /go/pkg/mod/github.com/hyperledger-labs/fabric-smart-client@* -path "*services/comm/p2p.go" -exec sed -i -e '15d' -e '192s/.*/\tif len(address) != 0 {/' {} \;
 COPY . .
 RUN go build -o /go/bin/app
 
