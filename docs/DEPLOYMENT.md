@@ -108,14 +108,60 @@ All deployments are driven via the unified `sworna` CLI (`./bin/sworna` or `pip 
 
 ### Port Mapping Reference:
 
-| Entity | Portal / UI | API Port | Fabric Peer | Owner FSC |
-|---|---|---|---|---|
-| **Central Bank** | `http://localhost:5273` | `:8100` | `:7051` | `:9100` (Issuer) / `:9000` (Auditor) |
-| **Bank 001** | `http://localhost:5273/b/001` | `:8100` | `:9051` | `:9200` |
-| **Bank 002** | `http://localhost:5273/b/002` | `:8100` | `:11051` | `:9300` |
-| **Bank 003** | `http://localhost:5273/b/003` | `:8100` | `:13051` | `:9400` |
-| **Bank 004** | `http://localhost:5273/b/004` | `:8100` | `:15051` | `:9500` |
-| **Bank 005** | `http://localhost:5273/b/005` | `:8100` | `:17051` | `:9600` |
+| Entity | Distributed Node Portal | Sandbox URL | API Port | Fabric Peer | Owner FSC (REST / P2P) |
+|---|---|---|---|---|---|
+| **Central Bank** | `http://<CB_IP>:5273` | `http://localhost:5273` | `:8100` | `:7051` | `:9100` / `:9101` (Issuer), `:9000` / `:9001` (Auditor) |
+| **Bank 001** | `http://<B1_IP>:5173` | `http://localhost:5273/b/001` | `:8100` | `:9051` | `:9200` / `:9201` |
+| **Bank 002** | `http://<B2_IP>:5173` | `http://localhost:5273/b/002` | `:8100` | `:11051` | `:9300` / `:9301` |
+| **Bank 003** | `http://<B3_IP>:5173` | `http://localhost:5273/b/003` | `:8100` | `:13051` | `:9400` / `:9401` |
+| **Bank 004** | `http://<B4_IP>:5173` | `http://localhost:5273/b/004` | `:8100` | `:15051` | `:9500` / `:9501` |
+| **Bank 005..N** | `http://<BN_IP>:5173` | `http://localhost:5273/b/00N` | `:8100` | `9051 + 2000*(k-1)` | `9200 + 100*(k-1)` / `+1` |
+
+---
+
+## 5. Multi-Node Workshop Runbook (30+ Laptops / Lab Machines)
+
+This model enables a single instructor to host a live hands-on CBDC workshop where up to 30+ attendees deploy sovereign commercial banks from their personal computers with zero host software overhead.
+
+### 5.1 Instructor Orchestration (Central Bank Host)
+1. **Initialize Central Bank Stack:**
+   ```bash
+   SWORNA_AUTO_ADMIT=1 ./bin/sworna cb init --provision
+   ```
+   *Note: Setting `SWORNA_AUTO_ADMIT=1` automatically approves all 30 incoming bank applications without needing manual portal approval clicks.*
+2. **Obtain Routable Host IP:**
+   - Tailscale IP: `tailscale ip -4` (e.g. `100.72.112.29`)
+   - Local LAN IP: `hostname -I | awk '{print $1}'` (e.g. `192.168.1.50`)
+3. **Distribute Workshop Key / Subnet:**
+   Share the Central Bank IP (`<CB_IP>`) and Tailscale reusable auth key with the attendees.
+
+### 5.2 Attendee Deployment (1 Single Command)
+Every attendee needs only Docker installed. Assign each attendee a unique 3-digit bank code (`001`, `002`, ..., `030`).
+
+Attendee runs **one command**:
+```bash
+./bin/sworna bank join --code <ASSIGNED_CODE> --cb-host <CB_IP>
+# Script fallback:
+./scripts/bank-docker.sh up <ASSIGNED_CODE> <CB_IP>
+```
+
+**Automated Pipeline (under 60 seconds):**
+- Starts local Dockerized CA and enrolls peer/admin MSP keys locally.
+- Submits admission payload to Central Bank API (`POST http://<CB_IP>:8100/api/v1/onboarding/apply`).
+- Streams minted Idemix token wallet keys and Orderer TLS certificates.
+- Joins channel `settlement`, launches CCaaS chaincode, starts FSC Owner engine, and spins up Bank Web Portal.
+- Accessible at `http://localhost:5173/b/<ASSIGNED_CODE>`.
+
+### 5.3 Workshop Wi-Fi Pre-Caching Strategy
+To avoid 30 simultaneous image pulls crashing the classroom Wi-Fi:
+1. Provide attendees with a USB stick or local LAN mirror containing saved Docker images:
+   ```bash
+   docker save hyperledger/fabric-ca:1.5.22 hyperledger/fabric-peer:3.1.5 golang:1.24 sworna-web:latest | gzip > sworna-images.tar.gz
+   ```
+2. Attendees import images in 10 seconds:
+   ```bash
+   docker load < sworna-images.tar.gz
+   ```
 
 ---
 

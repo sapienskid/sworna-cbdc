@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { QRCodeSVG } from "qrcode.react";
 import {
-  Send, Copy, Check, RefreshCcw, Wallet, ArrowUpRight, ArrowDownLeft, Download,
+  Send, Copy, Check, RefreshCcw, Wallet, ArrowUpRight, ArrowDownLeft, Download, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,8 +111,8 @@ export function CustomerView() {
                 <Badge variant="outline" className="bg-primary/10 font-semibold">
                   Digital Rupee (CBDC)
                 </Badge>
-                <Badge variant="secondary" className="flex items-center gap-1">
-                  <Wallet className="h-3 w-3" /> Idemix wallet
+                <Badge variant="secondary" className="flex items-center gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20">
+                  <ShieldCheck className="h-3 w-3" /> Zero-Knowledge Private
                 </Badge>
               </div>
               <p className="mt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -128,10 +128,10 @@ export function CustomerView() {
               <p className="text-xs text-muted-foreground">Bank {balance?.bank_code ?? user?.bank_code}</p>
               <div className="mt-3 flex items-center justify-end gap-1.5">
                 <code className="rounded bg-muted px-2 py-1 font-mono text-xs font-medium">{account}</code>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={copyAccount}>
-                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={copyAccount} title="Copy Account">
+                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={load} disabled={loading}>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={load} disabled={loading} title="Refresh Balance">
                   <RefreshCcw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
                 </Button>
               </div>
@@ -157,11 +157,11 @@ export function CustomerView() {
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Send className="h-5 w-5" /> Instant CBDC Transfer
+                <Send className="h-5 w-5" /> Send Digital Rupee
               </CardTitle>
               <CardDescription>
-                Settle directly to any registered account, same bank or inter-bank. Payments are
-                subject to your KYC tier's per-transaction and daily limits.
+                Direct peer-to-peer payment to any registered CBDC account across any participating bank.
+                Instant settlement with cryptographic zero-knowledge verification.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -171,7 +171,7 @@ export function CustomerView() {
                     <FormItem>
                       <FormLabel>Recipient Account Number</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. SWR-001-00000002" {...field} />
+                        <Input placeholder="e.g. SWR-002-00000001" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -187,7 +187,7 @@ export function CustomerView() {
                     <FormField control={sendForm.control} name="reference" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Payment Note / Memo</FormLabel>
-                        <FormControl><Input placeholder="e.g. Lunch split" {...field} /></FormControl>
+                        <FormControl><Input placeholder="e.g. Payment for invoice #104" {...field} /></FormControl>
                       </FormItem>
                     )} />
                   </div>
@@ -205,7 +205,7 @@ export function CustomerView() {
             <CardHeader className="text-center">
               <CardTitle className="text-lg">Receive Digital Rupee</CardTitle>
               <CardDescription>
-                Let the sender scan your account QR or share your account number.
+                Share your account number or have the sender scan your QR code.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center space-y-4 py-4">
@@ -221,7 +221,7 @@ export function CustomerView() {
                 <code className="font-mono text-sm font-bold">{account}</code>
               </div>
               <Button variant="outline" onClick={copyAccount} className="flex items-center gap-1.5">
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
                 Copy Account Number
               </Button>
             </CardContent>
@@ -232,10 +232,10 @@ export function CustomerView() {
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <ArrowUpRight className="h-5 w-5" /> Cash-Out (Redeem for Physical Cash)
+                <ArrowUpRight className="h-5 w-5" /> Cash Withdrawal
               </CardTitle>
               <CardDescription>
-                Redeem digital currency for cash at any bank teller or ATM. Daily limits apply.
+                Convert digital currency to physical banknotes at any bank branch counter or authorized ATM.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -243,7 +243,7 @@ export function CustomerView() {
                 <form onSubmit={withdrawForm.handleSubmit(onWithdraw)} className="space-y-4">
                   <FormField control={withdrawForm.control} name="amount" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Redemption Amount (SWR)</FormLabel>
+                      <FormLabel>Withdrawal Amount (SWR)</FormLabel>
                       <FormControl><Input placeholder="50.00" inputMode="decimal" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -255,7 +255,7 @@ export function CustomerView() {
                     </FormItem>
                   )} />
                   <Button type="submit" variant="secondary" className="w-full" disabled={withdrawForm.formState.isSubmitting}>
-                    Execute Cash-Out
+                    Execute Cash Withdrawal
                   </Button>
                 </form>
               </Form>
@@ -268,9 +268,9 @@ export function CustomerView() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Wallet className="h-5 w-5 text-muted-foreground" /> Statement History
+              <Wallet className="h-5 w-5 text-muted-foreground" /> Transaction History
             </CardTitle>
-            <CardDescription>Transaction receipts as recorded by the auditor node.</CardDescription>
+            <CardDescription>Official transaction statement with cryptographic settlement receipts.</CardDescription>
           </div>
           <div className="flex gap-2">
             <Button
@@ -290,7 +290,7 @@ export function CustomerView() {
             >
               <Download className="mr-1 h-3.5 w-3.5" /> CSV
             </Button>
-            <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            <Button variant="ghost" size="sm" onClick={load} disabled={loading} title="Refresh History">
               <RefreshCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
           </div>
@@ -300,7 +300,7 @@ export function CustomerView() {
             <TableHeader>
               <TableRow>
                 <TableHead>Tx ID</TableHead>
-                <TableHead>Direction</TableHead>
+                <TableHead>Activity</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Note</TableHead>
                 <TableHead>Status</TableHead>
@@ -308,31 +308,40 @@ export function CustomerView() {
             </TableHeader>
             <TableBody>
               {statements.slice(0, 25).map((s, i) => {
-                const isIncoming = s.recipient === account || s.recipient === balance?.full_name;
+                const isMyAcct = (addr: string) => addr === account || addr === balance?.full_name;
+                const isFromMe = isMyAcct(s.sender);
+                const isToMe = isMyAcct(s.recipient);
+                const isSelfTransfer = isFromMe && isToMe;
+
                 return (
                   <TableRow key={i}>
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {s.txid ? `${s.txid.slice(0, 10)}…` : "—"}
                     </TableCell>
                     <TableCell>
-                      {isIncoming ? (
-                        <span className="flex items-center text-xs font-semibold">
-                          <ArrowDownLeft className="mr-0.5 h-3.5 w-3.5" /> From {s.sender || "Central Bank"}
+                      {isSelfTransfer ? (
+                        <span className="flex items-center text-xs font-medium text-muted-foreground">
+                          <RefreshCcw className="mr-1 h-3 w-3 text-muted-foreground" /> Balance Change Returned
+                        </span>
+                      ) : isToMe ? (
+                        <span className="flex items-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          <ArrowDownLeft className="mr-1 h-3.5 w-3.5" /> Received from {s.sender || "Central Bank"}
                         </span>
                       ) : (
-                        <span className="flex items-center text-xs font-semibold">
-                          <ArrowUpRight className="mr-0.5 h-3.5 w-3.5 text-muted-foreground" /> To{" "}
-                          {s.recipient || "Counterparty"}
+                        <span className="flex items-center text-xs font-semibold text-foreground">
+                          <ArrowUpRight className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Sent to {s.recipient || "Counterparty"}
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className={`font-bold tabular-nums ${isIncoming ? "" : "text-muted-foreground"}`}>
-                      {isIncoming ? "+" : "-"}
+                    <TableCell className={`tabular-nums ${isSelfTransfer ? "text-xs text-muted-foreground" : isToMe ? "font-bold text-emerald-600 dark:text-emerald-400" : "font-bold text-foreground"}`}>
+                      {isSelfTransfer ? "" : isToMe ? "+" : "-"}
                       {fmtSwr(s.amount / 100)} SWR
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{s.reference || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {isSelfTransfer ? "Unspent UTXO change returned" : s.reference || "—"}
+                    </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20">
                         {s.status || "Settled"}
                       </Badge>
                     </TableCell>

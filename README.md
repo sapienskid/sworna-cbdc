@@ -94,11 +94,13 @@ In computer labs and multi-VM workshops, VMs communicate seamlessly over **Tails
 
 ## Key Design Decisions
 
-- **CB never touches retail accounts** — minting goes to bank reserve wallets (`pool_00k_w1`) only
+- **CB never touches retail accounts** — minting goes strictly to bank master reserve vaults (`RESERVE-{k}` / `pool_00k_w1`); retail customer accounts are strictly isolated (`pool_00k_w2..wN`)
+- **UTXO change-splitting** — transactions spend tokens in full, returning fresh change notes to sender under zero-knowledge proofs
 - **Banks self-provision** their Fabric org (peer/admin keys never leave their VM)
 - **Token-SDK Idemix** provides unlinkable ZK proofs for all token operations
 - **Multi-org channel updates** require co-signatures from all existing members (Fabric policy)
-- Scripts are **idempotent** — re-running `deploy-bank.sh` or `onboard-bank.sh` is safe
+- **1-Command Dockerized Onboarding** — `./bin/sworna bank join --code 00k --cb-host <CB_IP>` eliminates host runtime dependencies
+- **Scripts are idempotent** — re-running deploy or join steps is always safe
 
 ## Verification
 

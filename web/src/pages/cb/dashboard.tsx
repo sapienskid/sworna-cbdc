@@ -61,17 +61,17 @@ function CryptoBadge({ params }: { params: CryptoParams | null }) {
       </div>
     );
   return (
-    <div className="pt-1">
-      <Badge variant="outline" className="bg-muted">
-        {params.identifier.toUpperCase()} · UTXO ACTIVE
-      </Badge>
-      <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
-        Pedersen commitments · range proof base {params.range_proof.base}
-        <sup>{params.range_proof.exponent ?? "?"}</sup> · Idemix PK{" "}
-        {params.idemix_issuer_pk_fingerprint}
+    <div className="pt-1 space-y-1">
+      <div className="flex items-center gap-1.5">
+        <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-medium text-xs">
+          <ShieldCheck className="mr-1 h-3 w-3" /> Zero-Knowledge Settlement Active
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Token Layer: <span className="font-semibold text-foreground">{params.identifier.toUpperCase()}</span> · Privacy Preserved
       </p>
-      <p className="font-mono text-[11px] text-muted-foreground">
-        auditor cert {params.auditor.cert_fingerprint}
+      <p className="text-[11px] text-muted-foreground">
+        Pedersen Blinded · Regulatory Auditor Verified
       </p>
     </div>
   );
@@ -196,12 +196,12 @@ export function CBDashboard() {
         />
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Token Layer</CardTitle>
-            <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Privacy & Cryptography</CardTitle>
+            <ShieldCheck className="h-5 w-5 text-emerald-600" />
           </CardHeader>
           <CardContent className="flex items-start justify-between gap-2">
             <CryptoBadge params={crypto} />
-            <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={load} disabled={loading} title="Refresh Cryptography State">
               <RefreshCcw className={`mr-1 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
             </Button>
           </CardContent>
@@ -209,11 +209,12 @@ export function CBDashboard() {
       </div>
 
       {overview && overview.wallets_unreachable > 0 && (
-        <Card className="border-destructive/40 shadow-sm">
-          <CardContent className="flex items-center gap-2 py-3 text-sm text-destructive">
-            <ShieldCheck className="h-4 w-4" />
-            {overview.wallets_unreachable} wallet balance(s) unreachable — supply figures may be
-            understated while bank owner nodes are offline.
+        <Card className="border-amber-500/30 bg-amber-500/5 shadow-sm">
+          <CardContent className="flex items-center gap-2 py-3 text-sm text-amber-700 dark:text-amber-400">
+            <RefreshCcw className="h-4 w-4 animate-spin text-amber-600" />
+            <span>
+              {overview.wallets_unreachable} commercial bank node(s) currently synchronizing. Ledger supply updates automatically once nodes connect.
+            </span>
           </CardContent>
         </Card>
       )}

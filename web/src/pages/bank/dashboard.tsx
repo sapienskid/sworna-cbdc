@@ -247,8 +247,8 @@ export function BankDashboard({
               <DialogHeader>
                 <DialogTitle>Open New Customer Account</DialogTitle>
                 <DialogDescription>
-                  Creates the account, customer login, and assigns an Idemix token wallet from the
-                  bank's pool. Names are screened against the CB watchlist.
+                  Opens a customer digital rupee account with automated compliance screening,
+                  instant settlement, and zero-knowledge privacy.
                 </DialogDescription>
               </DialogHeader>
               <Form {...onboardForm}>
@@ -318,10 +318,10 @@ export function BankDashboard({
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <ArrowDownLeft className="h-5 w-5" /> Cash In (Deposit)
+                <ArrowDownLeft className="h-5 w-5" /> Cash In (Customer Deposit)
               </CardTitle>
               <CardDescription>
-                Disburse CBDC from the bank's Master Reserve Vault into a customer account.
+                Deposit digital currency into a customer account from the bank's master reserve vault (e.g. over-the-counter cash deposit).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -371,11 +371,10 @@ export function BankDashboard({
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <ArrowUpRight className="h-5 w-5" /> Cash Out (Withdraw)
+                <ArrowUpRight className="h-5 w-5" /> Cash Out (Customer Withdrawal)
               </CardTitle>
               <CardDescription>
-                Redeem customer CBDC back into the bank's reserve — subject to the customer's AML
-                daily limits.
+                Redeem customer CBDC for physical cash, returning digital currency to the bank's master reserve vault.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -522,7 +521,9 @@ export function BankDashboard({
                     </TableCell>
                     <TableCell className="font-bold tabular-nums">
                       {balances[a.account_number] === "" ? (
-                        <span className="text-xs text-muted-foreground">unreachable</span>
+                        <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-normal">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" /> Syncing...
+                        </span>
                       ) : (
                         `रू ${balances[a.account_number] ? fmtSwr(balances[a.account_number]) : "…"}`
                       )}

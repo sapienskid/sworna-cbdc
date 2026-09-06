@@ -21,7 +21,7 @@
 
 ---
 
-## 1. Architecture Overview
+### 1. Architecture Overview
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -32,58 +32,59 @@
 │  └─────────────┘  └─────────────┘  │  Auditor FSC :9000/9001  │ │
 │  ┌─────────────────────────────┐   └──────────────────────────┘ │
 │  │  Token CA   :27054          │   ┌──────────────────────────┐ │
-│  │  Fabric CA  :7054           │   │  Backend API  :8000      │ │
-│  └─────────────────────────────┘   │  CB Portal    :5173      │ │
+│  │  Fabric CA  :7054           │   │  Backend API  :8100      │ │
+│  └─────────────────────────────┘   │  CB Portal    :5273      │ │
 │                                    └──────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────┘
-           ↕ Tailscale mesh (encrypted, private)
+           ↕ Tailscale mesh (encrypted, private) / LAN
 ┌────────────────────────────────────────────────────────┐
 │               BANK A VM  (Bank1MSP)                    │
 │  ┌──────────────┐  ┌──────────────────────────────┐   │
 │  │  Peer (B1)   │  │  Owner FSC (owner1)          │   │
 │  │  :9051       │  │  REST  :9200  P2P :9201      │   │
 │  └──────────────┘  └──────────────────────────────┘   │
-│  ┌──────────────┐  ┌───────────────┐                  │
-│  │  Bank CA     │  │  Backend API  │                  │
-│  │  :8054       │  │  :8000        │                  │
-│  └──────────────┘  └───────────────┘                  │
+│  ┌──────────────┐  ┌──────────────────────────────┐   │
+│  │  Bank CA     │  │  Bank Web Portal             │   │
+│  │  :20055      │  │  :5173 (Docker container)    │   │
+│  └──────────────┘  └──────────────────────────────┘   │
 └────────────────────────────────────────────────────────┘
-           ↕ Same Tailscale mesh
+           ↕ Same Tailscale mesh / LAN
 ┌────────────────────────────────────────────────────────┐
 │               BANK B VM  (Bank2MSP)                    │
 │  ┌──────────────┐  ┌──────────────────────────────┐   │
 │  │  Peer (B2)   │  │  Owner FSC (owner2)          │   │
 │  │  :11051      │  │  REST  :9300  P2P :9301      │   │
 │  └──────────────┘  └──────────────────────────────┘   │
-│  ┌──────────────┐  ┌───────────────┐                  │
-│  │  Bank CA     │  │  Backend API  │                  │
-│  │  :9054       │  │  :8000        │                  │
-│  └──────────────┘  └───────────────┘                  │
+│  ┌──────────────┐  ┌──────────────────────────────┐   │
+│  │  Bank CA     │  │  Bank Web Portal             │   │
+│  │  :20056      │  │  :5173 (Docker container)    │   │
+│  └──────────────┘  └──────────────────────────────┘   │
 └────────────────────────────────────────────────────────┘
 ```
 
 ### Design Principles
 
-- **CB manages banks only** — mints/burns wholesale SWR into bank reserve vaults (`pool_00k_w1`); never touches retail customer accounts directly.
-- **Banks manage customers** — disburse from reserve vault (`deposit`), withdraw (`redeem`), and facilitate P2P transfers.
+- **CB manages banks only** — mints/burns wholesale SWR into commercial bank master reserve vaults (`RESERVE-{k}` / `pool_00k_w1`); never touches retail citizen accounts directly.
+- **Banks manage customers** — maintain retail customer accounts (`pool_00k_w2..wN`), disburse from reserve vault (`deposit`), withdraw (`redeem`), and facilitate P2P transfers.
 - **Zero-knowledge transfers** — Idemix (Token-SDK) hides token amounts/owners; auditor validates ZK proofs without learning participant identities.
+- **UTXO change-splitting** — Token inputs are consumed in full; transfers generate both a recipient output and a self-directed change output sharing the same transaction ID.
 - **Every transfer** is endorsed by the relevant peers, ordered by the CB orderer, and committed to the distributed ledger.
 
 ### Token Lifecycle Flow
 
 ```
-Central Bank --[POST /api/v1/admin/mint]--> Bank Reserve Vault (pool_00k_w1)
+Central Bank --[POST /api/v1/admin/mint]--> Bank Reserve Vault (RESERVE-00k / pool_00k_w1)
                                                     │
                                          [POST /api/v1/bank/deposit]
                                                     │
                                                     ▼
-                                          Customer Wallet (pool_00k_w2)
+                                          Customer Wallet (Alice: pool_00k_w2)
                                                     │
                                    [POST /api/v1/payments/transfer]
-                                        (Intra or Inter-bank P2P)
-                                                    │
-                                                    ▼
-                                     Counterparty Customer Wallet (pool_00j_w2)
+                                 (Intra or Inter-bank ZKP Transfer)
+                                        │                      │
+                  [Recipient Output]    ▼                      ▼   [Change Output]
+           Counterparty Customer (Bob: pool_00j_w2)       Alice (pool_00k_w2)
 ```
 
 ---
@@ -277,17 +278,17 @@ WantedBy=multi-user.target
 ./bin/sworna test e2e
 ```
 
-### Live Verified Results (5-Bank Network Session Log)
+### Live Verified Distributed Network (3 Separate Physical Machines Over Tailscale)
 
 | Step | Operation | Result | Details |
 |------|-----------|--------|---------|
-| 1 | **CB Wholesale Mint** | **CONFIRMED** | Minted 10,000 SWR to Bank 001 (`txid: 8fea91f9...`) and 5,000 SWR in automated E2E (`txid: 3c43360a...`) |
-| 2 | **Customer Onboarding** | **CONFIRMED** | Onboarded Alice (`SWR-001-00000001`) and Bob (`SWR-002-00000001`) with Idemix wallet assignments |
-| 3 | **Interbank ZKP Settlement (B1 → B2)** | **CONFIRMED** | Bank 001 sent 2,500 SWR to Bank 002 (`txid: 00fc85bd...`) verified by Auditor node |
-| 4 | **Interbank ZKP Settlement (B2 → B5)** | **CONFIRMED** | Bank 002 sent 500 SWR to Bank 005 (`txid: 0f96759f...`) verified by Auditor node |
-| 5 | **Customer Retail Payment (Alice → Bob)** | **CONFIRMED** | Alice (Bank 001) paid Bob (Bank 002) 100 SWR (`txid: f5399348...`) |
-| 6 | **Customer Token Redemption (Bob)** | **CONFIRMED** | Bob redeemed 100 SWR (`txid: 3607ce2a...`) verified and burned by Auditor node |
-| 7 | **Automated E2E Transfer (B1 → B3)** | **CONFIRMED** | Bank 001 sent 1,500 SWR to Bank 003 (`txid: 1c4726d1...`) via `./bin/sworna test e2e` |
+| 1 | **Central Bank Wholesale Mint (B1)** | **CONFIRMED** | Minted 75,000 SWR to Bank 001 reserve vault (`txid: f70f94c2af…`) |
+| 2 | **Central Bank Wholesale Mint (B2)** | **CONFIRMED** | Minted 50,000 SWR to Bank 002 reserve vault (`txid: 4a2189cd01…`) |
+| 3 | **Customer Onboarding & Cash-In** | **CONFIRMED** | Alice (`SWR-001-00000001`) cashed in 75,000 SWR; Bob (`SWR-002-00000001`) cashed in 50,000 SWR |
+| 4 | **Interbank ZKP Settlement (Alice → Bob)** | **CONFIRMED** | Alice paid Bob 1,500 SWR (`txid: 92d366b647…`). Change output of 8,500 SWR returned to Alice. Auditor verified ZKP proofs. |
+| 5 | **Reverse Interbank Transfer (Bob → Alice)** | **CONFIRMED** | Bob refunded Alice 500 SWR (`txid: 97cc3e040d…`). Alice balance: 74,000 SWR; Bob balance: 51,000 SWR |
+| 6 | **Customer Token Redemption / Burn (Bob)** | **CONFIRMED** | Bob redeemed 5,000 SWR back to CB (`txid: 9c9321045b…`). Bob balance: 46,000 SWR. Verified by Auditor node. |
+| 7 | **Ledger Supply Integrity** | **CONFIRMED** | Central Bank Circulation: exactly 120,000 SWR (125,000 minted - 5,000 burned). Unreachable wallets: `0`. |
 
 ---
 
@@ -312,6 +313,9 @@ WantedBy=multi-user.target
 
 | Issue | Cause | Fix Applied |
 |-------|-------|-------------|
+| Retail customer statement shows Wholesale Mint and duplicate Tx IDs | Retail customer #1 was assigned `pool_001_w1` (identical to Master Reserve Vault) + UTXO change returned to sender | Segregate bank master vault (`reserve_{code}`) from customer pool (`pool_{code}_w1..wN`). Recognize that UTXO splits produce both a recipient debit and a change credit under the same Tx ID. |
+| ZKP signature verification error on chaincode init | `zkatdlog_pp.json` contained raw PEM certificates instead of protobuf `msp.SerializedIdentity` structures | Serialized identities using standard Fabric protobuf encoding with MSP identifier and certificate byte payloads. |
+| FSC cross-node transfer failure (`all dials failed`) | FSC owner node lacked counterparty IP resolution and peer TLS certificates in `core.yaml` | Propagated counterparty host mappings via `bank-hosts.env` and distributed public certificates into `/var/fsc/keys/`. |
 | VirtualBox Bridged mode gets no IP on lab Wi-Fi | 802.11 Wi-Fi standard rejects multiple MAC addresses on single link; university AP isolation blocks DHCP | Revert VirtualBox to default **NAT** mode; connect machines via **Tailscale** using a Reusable Auth Key |
 | Multi-VM Tailscale without individual accounts | Students don't have or want individual Tailscale accounts | Generate a single **Reusable Auth Key** from Tailscale Admin Console; join via `sudo tailscale up --authkey <KEY>` |
 | Connecting single VM to multiple Tailscale accounts | Tailscale connects to 1 account at a time | Use Tailscale **Node Sharing** (Admin console $\rightarrow$ Share Machine link) or a shared Reusable Auth Key |
@@ -319,7 +323,6 @@ WantedBy=multi-user.target
 | Channel or anchor peer update failure on re-run (`already exists`) | Ledger state preserved across runs | Made `createChannel.sh`, `setAnchorPeer.sh`, and `deployCCAAS.sh` idempotent to tolerate existing channel and anchor states |
 | ZKP Public Parameters mismatch (`invalid proof`) | Re-generated Idemix CA produced fresh issuer key hash differing from checked-in `zkatdlog_pp.json` | Compiled native `tokengen` from Fabric Token-SDK v0.3.0, generated fresh public parameters, committed chaincode sequence on-chain |
 | Chaincode upgrade error: `already initialized but called as init` | Fabric v2/v3 rejects `--isInit` on already initialized chaincode definitions | Upgraded chaincode definition, then invoked regular `init` transaction without `--isInit` flag |
-| `failed getting recipient identity: all dials failed` | FSC announced local loopback IP instead of routable container network | Configured container DNS overrides and bridge network routing in `scripts/gen-net-overrides.py` |
 | `sufficient but partially locked funds` | In-flight transaction temporarily locked UTXO inputs | Waited for ledger commit (~8-10s) for token collector to release change outputs; increased client timeout to 120s |
 
 ---

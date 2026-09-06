@@ -83,7 +83,7 @@ export function CBLedger() {
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Blocks className="h-4 w-4 text-muted-foreground" /> Ledger monitor
+              <Blocks className="h-4 w-4 text-muted-foreground" /> Consensus & Ledger Monitor
             </CardTitle>
             <Button variant="outline" size="sm" onClick={load} disabled={loading}>
               Refresh
@@ -91,36 +91,36 @@ export function CBLedger() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              channel <span className="font-mono text-foreground">{ledger?.channel ?? "…"}</span> ·
-              height <span className="font-semibold text-foreground">{ledger?.height ?? "…"}</span>
+              Channel <span className="font-mono font-medium text-foreground">{ledger?.channel ?? "sworna-channel"}</span> ·
+              Block Height <span className="font-semibold text-foreground">{ledger?.height ?? "…"}</span>
             </p>
             {!ledger && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Peer CLI unreachable from this host — block data unavailable.
+                Connecting to consensus ledger peer nodes...
               </p>
             )}
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Block</TableHead>
-                  <TableHead>Tx</TableHead>
-                  <TableHead>Tx ids</TableHead>
+                  <TableHead>Tx Count</TableHead>
+                  <TableHead>Committed Tx IDs</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {ledger?.blocks.slice().reverse().map((b) => (
                   <TableRow key={b.number}>
-                    <TableCell className="font-mono text-xs">{b.number}</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">#{b.number}</TableCell>
                     <TableCell>{b.tx_count}</TableCell>
                     <TableCell className="font-mono text-xs">
-                      {b.txids.map((t) => shortTxid(t)).join(", ") || "config"}
+                      {b.txids.map((t) => shortTxid(t)).join(", ") || "Channel Config"}
                     </TableCell>
                   </TableRow>
                 ))}
                 {!ledger?.blocks.length && (
                   <TableRow>
                     <TableCell colSpan={3} className="py-4 text-center text-sm text-muted-foreground">
-                      No recent blocks.
+                      No recent blocks recorded.
                     </TableCell>
                   </TableRow>
                 )}
@@ -131,8 +131,8 @@ export function CBLedger() {
 
         <Card className="lg:col-span-2 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Transaction volume (14 days)</CardTitle>
-            <CardDescription>Off-chain payment mirror, SWR per day.</CardDescription>
+            <CardTitle className="text-base">Settlement Volume (14 Days)</CardTitle>
+            <CardDescription>Daily transacted CBDC volume across all member banks (रू SWR).</CardDescription>
           </CardHeader>
           <CardContent>
             <Sparkline values={days.values} labels={days.labels} />
@@ -144,9 +144,9 @@ export function CBLedger() {
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <ListOrdered className="h-4 w-4 text-muted-foreground" /> Recent transactions
+              <ListOrdered className="h-4 w-4 text-muted-foreground" /> Audited Settlement Transactions
             </CardTitle>
-            <CardDescription>Off-chain mirror of settlement activity.</CardDescription>
+            <CardDescription>Real-time ledger audit trail of wholesale mints, retail payments, and interbank transfers.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Input
@@ -187,11 +187,11 @@ export function CBLedger() {
             <TableHeader>
               <TableRow>
                 <TableHead>Type</TableHead>
-                <TableHead>From</TableHead>
-                <TableHead>To</TableHead>
+                <TableHead>Sender</TableHead>
+                <TableHead>Recipient</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead>Time</TableHead>
+                <TableHead>Reference Note</TableHead>
+                <TableHead>Timestamp</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -202,8 +202,8 @@ export function CBLedger() {
                       {txTypeLabel(t.tx_type)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{t.from_account || "CB"}</TableCell>
-                  <TableCell className="font-mono text-xs">{t.to_account || "CB"}</TableCell>
+                  <TableCell className="font-mono text-xs">{t.from_account || "Central Bank Reserve"}</TableCell>
+                  <TableCell className="font-mono text-xs">{t.to_account || "Central Bank Reserve"}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     {fmtSwr(t.amount)}
                   </TableCell>

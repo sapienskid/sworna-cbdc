@@ -10,6 +10,7 @@ set -Eeuo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 export PATH="$ROOT/bin:$PATH"
 export FABRIC_CFG_PATH="$ROOT/config"
+if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
 
 ACTION="${1:-up}"
 BANK_CODE="${2:-${BANK_CODE:-}}"

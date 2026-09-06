@@ -66,8 +66,8 @@ function PermissionsDialog({
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             <div>
-              <Label htmlFor="can-redeem">Can redeem (burn to CB)</Label>
-              <p className="text-xs text-muted-foreground">Wholesale redemption of reserves</p>
+              <Label htmlFor="can-redeem" className="font-semibold">Allow Wholesale Redemption</Label>
+              <p className="text-xs text-muted-foreground">Permit bank to return wholesale reserves to the Central Bank</p>
             </div>
             <Switch
               id="can-redeem"
@@ -76,24 +76,40 @@ function PermissionsDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="interbank-limit">Interbank limit (minor units, 0 = unlimited)</Label>
+            <div className="flex justify-between items-baseline">
+              <Label htmlFor="interbank-limit" className="font-semibold">Interbank Daily Limit (SWR)</Label>
+              <span className="text-xs text-muted-foreground">
+                {perms.interbank_limit_minor === 0 ? "Unlimited" : `रू ${(perms.interbank_limit_minor / 100).toLocaleString()} limit`}
+              </span>
+            </div>
             <Input
               id="interbank-limit"
-              inputMode="numeric"
-              value={perms.interbank_limit_minor}
+              type="number"
+              placeholder="e.g. 500000 (enter 0 for unlimited)"
+              value={perms.interbank_limit_minor ? perms.interbank_limit_minor / 100 : ""}
               onChange={(e) =>
-                setPerms({ ...perms, interbank_limit_minor: Number(e.target.value) || 0 })
+                setPerms({ ...perms, interbank_limit_minor: Math.round((Number(e.target.value) || 0) * 100) })
               }
             />
+            <p className="text-[11px] text-muted-foreground">Maximum daily interbank settlement volume authorized by Central Bank</p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="redeem-limit">Redeem limit (minor units, 0 = unlimited)</Label>
+            <div className="flex justify-between items-baseline">
+              <Label htmlFor="redeem-limit" className="font-semibold">Wholesale Redemption Limit (SWR)</Label>
+              <span className="text-xs text-muted-foreground">
+                {perms.redeem_limit_minor === 0 ? "Unlimited" : `रू ${(perms.redeem_limit_minor / 100).toLocaleString()} limit`}
+              </span>
+            </div>
             <Input
               id="redeem-limit"
-              inputMode="numeric"
-              value={perms.redeem_limit_minor}
-              onChange={(e) => setPerms({ ...perms, redeem_limit_minor: Number(e.target.value) || 0 })}
+              type="number"
+              placeholder="e.g. 1000000 (enter 0 for unlimited)"
+              value={perms.redeem_limit_minor ? perms.redeem_limit_minor / 100 : ""}
+              onChange={(e) =>
+                setPerms({ ...perms, redeem_limit_minor: Math.round((Number(e.target.value) || 0) * 100) })
+              }
             />
+            <p className="text-[11px] text-muted-foreground">Maximum reserve burn amount allowed per settlement cycle</p>
           </div>
         </div>
         <DialogFooter>

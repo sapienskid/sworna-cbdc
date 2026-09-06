@@ -30,10 +30,12 @@ Deeper as-built documentation lives in the topic deep dives:
   - **Tier 1 (Wholesale):** The Central Bank transacts *only* with regulated commercial banks (`Bank{k}MSP`). Wholesale currency is issued into commercial bank reserve vaults (`RESERVE-{k}`). The Central Bank does not manage retail citizen accounts.
   - **Tier 2 (Retail):** Commercial banks maintain retail customer accounts, enforce customer-level KYC/AML, and hold customer Idemix wallet keys on their owner nodes. Customers transact intra-bank or cross-bank through their commercial banks.
 - **Money Representation: Token-Based UTXO (ADR-0006)**
-  - Currency exists as individual spendable cryptographic tokens with change-splitting ($1000 	ext{ SWR} 	o 100 	ext{ to recipient} + 900 	ext{ change to sender}$).
+  - Currency exists as individual spendable cryptographic tokens with change-splitting ($1000 \text{ SWR} \to 100 \text{ to recipient} + 900 \text{ change to sender}$).
   - Balances are derived dynamically from unspent transaction outputs owned by an Idemix credential.
+  - **UTXO Change-Splitting Mechanics:** Unlike account-based blockchains (e.g. Ethereum) where balances are single mutable scalar values, UTXO tokens are immutable discrete notes. To spend 1,500 SWR from a 10,000 SWR note, the entire 10,000 note is spent (consumed), a 1,500 SWR note is created for the recipient, and an 8,500 SWR note is returned to the sender as change. On-chain transaction records therefore contain both the recipient payment and the self-directed change output sharing the identical transaction ID.
+  - **Wholesale Reserve vs. Retail Customer Wallet Segregation:** Tier 1 wholesale reserves reside in dedicated bank reserve vaults (`reserve_{code}` or `pool_{code}_w0`). Retail customer accounts are drawn strictly from `pool_{code}_w1..wN`. This structural separation guarantees that wholesale central bank mints never touch customer retail statements.
 - **Privacy Primitives: Zero-Knowledge Proofs (zkatdlog)**
-  - **Pedersen Commitments:** Amounts $v$ are hidden on-ledger using homomorphic commitments $C = g_0^{H(	ext{SWR})} \cdot g_1^v \cdot g_2^r$ where $r$ is a blinding factor. Peers verify $\sum C_{	ext{in}} = \sum C_{	ext{out}}$ without learning $v$.
+  - **Pedersen Commitments:** Amounts $v$ are hidden on-ledger using homomorphic commitments $C = g_0^{H(\text{SWR})} \cdot g_1^v \cdot g_2^r$ where $r$ is a blinding factor. Peers verify $\sum C_{\text{in}} = \sum C_{\text{out}}$ without learning $v$.
   - **ZKAT-DLOG Range Proofs:** Senders generate zero-knowledge range proofs proving $v \ge 0$ (preventing negative money creation) and proving spending rights without revealing persistent identity keys.
   - **Idemix Anonymity:** Account identities on-chain are one-time pseudonyms (nyms) derived from Camenisch-Lysyanskaya (CL) blind signatures over the `BN254` pairing curve.
 
@@ -87,8 +89,8 @@ Deeper as-built documentation lives in the topic deep dives:
 - **Banking Backend (FastAPI):** Customer onboarding, account management, daily transfer limits, watchlist screening, and payment orchestration.
 - **Database:** Clustered PostgreSQL with row-level locking (upgraded from dev SQLite) and asynchronous Fabric block-event finality confirmation.
 - **Portals (React + Vite):**
-  - Central Bank Console (`:5173`): Monetary supply dashboard, reserve management, bank admission approval, and ledger inspection.
-  - Commercial Bank Portals (`:5173` or `:8001+`): Customer account onboarding, retail deposits, interbank transfers, and compliance alerts.
+  - Central Bank Console (`:5273` in Docker): Monetary supply dashboard, reserve management, bank admission approval, and ledger inspection. Central Bank Backend API operates on `:8100`.
+  - Commercial Bank Portals (`:5173` on individual bank hosts, or `:5273/b/{code}` in single-node sandbox mode): Customer account onboarding, retail deposits, interbank transfers, and compliance alerts.
 
 ---
 
@@ -154,3 +156,6 @@ In the production architecture:
   A self-contained Docker Compose stack for development, demonstration, and automated CI testing. Runs 1 Central Bank + 5 Commercial Banks with distinct internal ports, isolated networks, and pre-seeded wallets. Zero Tailscale, zero SSH, zero manual configuration.
 - **Target B: Distributed Production Multi-Host Package:**
   Multi-cloud / multi-datacenter deployment managed via Terraform and Ansible. Encrypted IPsec / leased-line interconnects, external PostgreSQL databases, and HSM key protection.
+- **Target C: Distributed Multi-Node Workshop / Computer Lab (30+ Machines):**
+  Pure Dockerized, 1-command onboarding (`./bin/sworna bank join --code <CODE> --cb-host <CB_IP>`) orchestrated over a zero-config Tailscale mesh or local LAN. Eliminates all host software installation (Go, Node.js, Python) on attendee laptops. Automated admission APIs stream certificates and join bundles directly to attendees upon Central Bank administrative authorization.
+

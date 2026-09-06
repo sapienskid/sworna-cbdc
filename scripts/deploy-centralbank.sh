@@ -19,6 +19,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="$ROOT/bin:$PATH"
 export FABRIC_CFG_PATH="$ROOT/config"
+if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
 . "$ROOT/scripts/bank-hosts.sh"      # owner->host registry fallback
 load_bank_hosts
 
