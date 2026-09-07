@@ -36,6 +36,7 @@ Start here for anything you want to understand or operate.
 | Doc | What it covers |
 |---|---|
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Roles-by-script, trust model, join bundles, dev→lab progression |
+| [LAB-AND-PROXMOX-SETUP.md](LAB-AND-PROXMOX-SETUP.md) | University lab (Tailscale) & bare-metal 10-bank Proxmox KVM cluster for NRB demo |
 | [API.md](API.md) | REST endpoint catalog (backend + engine contracts) |
 | [FULL-BANKING-SYSTEM.md](FULL-BANKING-SYSTEM.md) | Subsystem checklist (what exists vs planned) |
 | [PHASES.md](PHASES.md) | Roadmap: phases, WBS, risk register |

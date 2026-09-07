@@ -3,6 +3,8 @@
 > **Two-Tier CBDC on Hyperledger Fabric + Token-SDK**  
 > Central Bank ↔ Commercial Banks ↔ Retail Customers  
 > All token transfers are zero-knowledge (Idemix/ZKP), settled on the `settlement` channel.
+>
+> 📖 **Deploying in a university lab or for Nepal Rastra Bank demo?** See the [Lab & Bare-Metal Proxmox 10-Bank Cluster Guide](LAB-AND-PROXMOX-SETUP.md) for Tailscale mesh networking, Proxmox KVM sizing, and the 5-Act live demo script.
 
 ---
 
